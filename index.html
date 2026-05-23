@@ -1,0 +1,1573 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RCCG Immanuel — Parish Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Playfair+Display:wght@600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <!-- ══════════════════════════════════════════════════════
+         OFFLINE BANNER — shown when network drops
+    ══════════════════════════════════════════════════════ -->
+    <div
+      id="offline-banner"
+      class="offline-banner hidden"
+      role="alert"
+      aria-live="assertive"
+    >
+      <span class="offline-banner__icon">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path d="M1 1l22 22" />
+          <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+          <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+          <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
+          <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+          <circle cx="12" cy="20" r="1" />
+        </svg>
+      </span>
+      <span class="offline-banner__text"
+        >You're offline — changes won't save until connection is restored.</span
+      >
+      <button
+        class="offline-banner__close"
+        id="offline-banner-close"
+        aria-label="Dismiss offline banner"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- CONFIRMATION MODAL -->
+    <div
+      id="modal-overlay"
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      style="display: none"
+    >
+      <div class="modal-box">
+        <div class="modal-icon">
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </div>
+        <h3 id="modal-title">Delete Member?</h3>
+        <p id="modal-message">
+          This action cannot be undone. The member record and all associated
+          data will be permanently removed.
+        </p>
+        <div class="modal-actions">
+          <button id="modal-cancel" class="modal-btn modal-btn-cancel">
+            Cancel
+          </button>
+          <button id="modal-confirm" class="modal-btn modal-btn-confirm">
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FORGOT PASSWORD MODAL -->
+    <div
+      id="forgot-modal"
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="forgot-modal-title"
+      style="display: none"
+    >
+      <div class="modal-box">
+        <div
+          class="modal-icon"
+          style="background: var(--navy-xlight); color: var(--navy)"
+        >
+          <svg
+            width="26"
+            height="26"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </div>
+        <h3 id="forgot-modal-title">Reset your password</h3>
+        <p>
+          Enter the email address linked to your admin account and we'll send
+          you a reset link.
+        </p>
+        <div class="login-field" style="text-align: left; margin-bottom: 20px">
+          <label class="field-label" for="reset-email-input"
+            >Email Address</label
+          >
+          <div class="input-wrap">
+            <svg
+              class="input-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+              />
+              <polyline points="22,6 12,12 2,6" />
+            </svg>
+            <input
+              type="email"
+              id="reset-email-input"
+              placeholder="your@email.com"
+              autocomplete="email"
+              style="
+                box-sizing: border-box;
+                width: 100%;
+                padding: 11px 14px 11px 40px;
+                font-size: 14px;
+                color: var(--text-primary);
+                background: var(--bg);
+                border: 1.5px solid var(--border);
+                border-radius: var(--radius-md);
+                outline: none;
+                transition: var(--transition);
+                min-height: 44px;
+                font-family: var(--font-body);
+              "
+            />
+          </div>
+          <p
+            id="reset-email-error"
+            style="
+              font-size: 12px;
+              font-weight: 600;
+              color: var(--crimson);
+              min-height: 16px;
+              margin-top: 4px;
+            "
+          ></p>
+        </div>
+        <div class="modal-actions">
+          <button id="forgot-cancel-btn" class="modal-btn modal-btn-cancel">
+            Cancel
+          </button>
+          <button
+            id="forgot-send-btn"
+            class="modal-btn modal-btn-confirm"
+            style="
+              background: var(--navy);
+              box-shadow: 0 3px 10px rgba(15, 33, 71, 0.25);
+            "
+          >
+            <span id="forgot-send-text">Send reset link</span>
+            <span
+              id="forgot-send-spinner"
+              class="btn-spinner"
+              style="display: none"
+            ></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SESSION TIMEOUT MODAL -->
+    <div
+      id="session-warning-modal"
+      class="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="session-warning-title"
+      style="display: none"
+    >
+      <div class="modal-box">
+        <div
+          class="modal-icon"
+          style="background: var(--gold-light); color: var(--gold)"
+        >
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+        </div>
+        <h3 id="session-warning-title">Still there?</h3>
+        <p>
+          You've been inactive for a while. You'll be signed out in
+          <strong id="session-countdown">60</strong> seconds.
+        </p>
+        <div class="modal-actions">
+          <button id="session-logout-btn" class="modal-btn modal-btn-cancel">
+            Sign out now
+          </button>
+          <button
+            id="session-stay-btn"
+            class="modal-btn modal-btn-confirm"
+            style="
+              background: var(--navy);
+              box-shadow: 0 3px 10px rgba(15, 33, 71, 0.25);
+            "
+          >
+            Stay signed in
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEMBER PROFILE DRAWER -->
+    <div id="profile-overlay" class="profile-overlay" style="display: none">
+      <div class="profile-drawer">
+        <button
+          class="profile-close"
+          id="profile-close"
+          aria-label="Close profile"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        <div id="profile-content"></div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         LOGIN SCREEN
+    ══════════════════════════════════════════════════════ -->
+    <div id="login-screen">
+      <div class="login-bg">
+        <div class="login-bg-orb login-bg-orb-1"></div>
+        <div class="login-bg-orb login-bg-orb-2"></div>
+      </div>
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="login-brand-icon">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="login-title">RCCG Immanuel</h1>
+            <p class="login-subtitle">Mega Parish — Youth Province 13</p>
+          </div>
+        </div>
+        <div class="login-divider"></div>
+        <p class="login-label">Admin Access</p>
+        <div class="login-field">
+          <label class="field-label" for="login-email">Email Address</label>
+          <div class="input-wrap">
+            <svg
+              class="input-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+              />
+              <polyline points="22,6 12,12 2,6" />
+            </svg>
+            <input
+              type="email"
+              id="login-email"
+              placeholder="your@email.com"
+              autocomplete="email"
+            />
+          </div>
+        </div>
+        <div class="login-field">
+          <label class="field-label" for="login-password">Password</label>
+          <div class="input-wrap">
+            <svg
+              class="input-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <input
+              type="password"
+              id="login-password"
+              placeholder="••••••••"
+              autocomplete="current-password"
+            />
+          </div>
+          <div style="text-align: right; margin-top: 6px">
+            <button
+              type="button"
+              id="forgot-password-link"
+              style="
+                background: none;
+                border: none;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--gold-mid);
+                cursor: pointer;
+                padding: 0;
+                font-family: var(--font-body);
+              "
+            >
+              Forgot password?
+            </button>
+          </div>
+        </div>
+        <p id="login-error" class="login-error" role="alert"></p>
+        <button id="login-btn" class="login-btn">
+          <span id="login-btn-text">Sign In</span>
+          <span
+            id="login-spinner"
+            class="btn-spinner"
+            style="display: none"
+          ></span>
+        </button>
+        <p class="login-secure-note">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"
+            />
+          </svg>
+          Secure access — authorized personnel only
+        </p>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         MAIN APP
+    ══════════════════════════════════════════════════════ -->
+    <div id="main-app" style="display: none">
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-brand-icon">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <polyline points="9 22 9 12 15 12 15 22" />
+            </svg>
+          </div>
+          <div class="sidebar-brand-text">
+            <span class="sidebar-brand-name">RCCG Immanuel</span>
+            <span class="sidebar-brand-sub">YP13 Admin</span>
+          </div>
+        </div>
+        <nav class="sidebar-nav" role="navigation" aria-label="Main navigation">
+          <button
+            class="nav-item active"
+            data-page="dashboard"
+            aria-current="page"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+            </svg>
+            Dashboard
+          </button>
+          <button class="nav-item" data-page="members">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            Members
+            <span class="nav-badge" id="nav-member-count">0</span>
+          </button>
+          <button class="nav-item" data-page="register">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Register Member
+          </button>
+          <button class="nav-item" data-page="birthdays">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Birthdays
+            <span
+              class="nav-badge nav-badge-gold"
+              id="nav-birthday-count"
+              style="display: none"
+              >0</span
+            >
+          </button>
+          <button class="nav-item" data-page="export">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export Data
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-user-avatar" id="sidebar-user-avatar">A</div>
+          <span class="sidebar-user-role">Administrator</span>
+          <button
+            id="logout-btn"
+            class="logout-btn"
+            title="Sign out"
+            aria-label="Sign out"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span class="logout-label">Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- MOBILE HEADER -->
+      <header class="mobile-header">
+        <button
+          class="mobile-menu-btn"
+          id="mobile-menu-btn"
+          aria-label="Open menu"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <span class="mobile-header-title" id="mobile-page-title"
+          >Dashboard</span
+        >
+        <div class="mobile-header-dot"></div>
+      </header>
+
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+      <!-- MAIN CONTENT -->
+      <main class="main-content" id="main-content">
+        <!-- PAGE: DASHBOARD -->
+        <div class="page active" id="page-dashboard">
+          <div class="page-header">
+            <div>
+              <h2 class="page-title">Dashboard</h2>
+              <p class="page-subtitle" id="dashboard-greeting">Good morning</p>
+            </div>
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+              "
+            >
+              <!-- DATA LAST SYNCED PILL -->
+              <div class="sync-pill" id="sync-pill" title="Last Firestore sync">
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                >
+                  <polyline points="23 4 23 10 17 10" />
+                  <polyline points="1 20 1 14 7 14" />
+                  <path
+                    d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"
+                  />
+                </svg>
+                <span id="sync-time-text">Syncing…</span>
+              </div>
+              <div class="status-pill">
+                <div class="status-dot"></div>
+                System live
+              </div>
+            </div>
+          </div>
+          <div
+            id="birthday-banner"
+            class="birthday-banner"
+            style="display: none"
+          ></div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-icon stat-icon-blue">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                  </svg>
+                </div>
+              </div>
+              <div class="stat-value" id="stat-members">
+                <div class="skeleton skeleton-num"></div>
+              </div>
+              <div class="stat-label">Total Members</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-icon stat-icon-green">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                </div>
+              </div>
+              <div class="stat-value" id="stat-workers">
+                <div class="skeleton skeleton-num"></div>
+              </div>
+              <div class="stat-label">Total Workers</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-icon stat-icon-gold">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </div>
+              </div>
+              <div class="stat-value" id="stat-birthdays-today">
+                <div class="skeleton skeleton-num"></div>
+              </div>
+              <div class="stat-label">Birthdays Today</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-top">
+                <div class="stat-icon stat-icon-purple">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                </div>
+              </div>
+              <div class="stat-value" id="stat-total">
+                <div class="skeleton skeleton-num"></div>
+              </div>
+              <div class="stat-label">Total Registered</div>
+            </div>
+          </div>
+
+          <!-- ══ NOTICE BOARD ══ -->
+          <div class="card notice-board-card" id="notice-board-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  style="
+                    display: inline-block;
+                    vertical-align: -2px;
+                    margin-right: 6px;
+                  "
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                  />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+                Notice Board
+              </h3>
+              <button class="card-action-link" id="notice-toggle-form-btn">
+                + Post Notice
+              </button>
+            </div>
+            <!-- Post form (hidden by default) -->
+            <div
+              id="notice-form-wrap"
+              class="notice-form-wrap"
+              style="display: none"
+            >
+              <textarea
+                id="notice-input"
+                class="notice-input"
+                placeholder="Type a short notice…"
+                rows="2"
+                maxlength="300"
+              ></textarea>
+              <div class="notice-form-actions">
+                <span class="notice-char-count" id="notice-char-count"
+                  >0 / 300</span
+                >
+                <button
+                  class="btn-secondary"
+                  id="notice-cancel-btn"
+                  style="padding: 6px 14px; font-size: 12px; min-height: 32px"
+                >
+                  Cancel
+                </button>
+                <button
+                  class="btn-primary"
+                  id="notice-post-btn"
+                  style="padding: 6px 16px; font-size: 12px; min-height: 32px"
+                >
+                  <span id="notice-post-text">Post</span>
+                  <span
+                    id="notice-post-spinner"
+                    class="btn-spinner"
+                    style="display: none; width: 12px; height: 12px"
+                  ></span>
+                </button>
+              </div>
+            </div>
+            <!-- Notices list -->
+            <div id="notices-list">
+              <p
+                style="
+                  font-size: 13px;
+                  color: var(--text-muted);
+                  padding: 4px 0;
+                "
+              >
+                No notices yet.
+              </p>
+            </div>
+          </div>
+
+          <!-- ══ ATTENDANCE HEADCOUNT ══ -->
+          <div class="card attendance-card">
+            <div class="card-header">
+              <h3 class="card-title">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  style="
+                    display: inline-block;
+                    vertical-align: -2px;
+                    margin-right: 6px;
+                  "
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                Weekly Headcount
+              </h3>
+              <span class="card-subtitle">Last 8 weeks</span>
+            </div>
+            <!-- Log form -->
+            <div class="attendance-log-form">
+              <div class="attendance-field-group">
+                <div class="attendance-field">
+                  <label class="field-label" for="att-date">Date</label>
+                  <input type="date" id="att-date" class="attendance-input" />
+                </div>
+                <div class="attendance-field">
+                  <label class="field-label" for="att-count">Count</label>
+                  <input
+                    type="number"
+                    id="att-count"
+                    class="attendance-input"
+                    placeholder="e.g. 120"
+                    min="0"
+                    max="9999"
+                  />
+                </div>
+                <button
+                  class="btn-primary attendance-save-btn"
+                  id="att-save-btn"
+                  style="align-self: flex-end"
+                >
+                  <span id="att-save-text">Save</span>
+                  <span
+                    id="att-save-spinner"
+                    class="btn-spinner"
+                    style="display: none; width: 12px; height: 12px"
+                  ></span>
+                </button>
+              </div>
+            </div>
+            <!-- Trend chart -->
+            <div class="attendance-chart-wrap">
+              <div
+                id="att-chart-empty"
+                class="att-chart-empty"
+                style="display: none"
+              >
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                <p>No headcount data yet — save a record above to begin.</p>
+              </div>
+              <canvas
+                id="att-chart"
+                width="700"
+                height="200"
+                style="display: none"
+              ></canvas>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Upcoming Birthdays</h3>
+              <span class="card-subtitle">Next 7 days</span>
+            </div>
+            <div id="upcoming-birthdays-list">
+              <div class="birthday-row skeleton-row">
+                <div class="skeleton skeleton-avatar"></div>
+                <div class="skeleton-text-group">
+                  <div class="skeleton skeleton-line-lg"></div>
+                  <div class="skeleton skeleton-line-sm"></div>
+                </div>
+              </div>
+              <div class="birthday-row skeleton-row">
+                <div class="skeleton skeleton-avatar"></div>
+                <div class="skeleton-text-group">
+                  <div class="skeleton skeleton-line-lg"></div>
+                  <div class="skeleton skeleton-line-sm"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Recently Registered</h3>
+              <button class="card-action-link" data-page="members">
+                View all
+              </button>
+            </div>
+            <div id="recent-members-list">
+              <div class="member-row skeleton-row">
+                <div class="skeleton skeleton-avatar"></div>
+                <div class="skeleton-text-group">
+                  <div class="skeleton skeleton-line-lg"></div>
+                  <div class="skeleton skeleton-line-sm"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE: MEMBERS -->
+        <div class="page" id="page-members">
+          <div class="page-header">
+            <div>
+              <h2 class="page-title">Members Directory</h2>
+              <p class="page-subtitle" id="members-count-text">Loading...</p>
+            </div>
+            <button class="btn-primary" data-page="register">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Member
+            </button>
+          </div>
+          <div class="filters-bar">
+            <div class="search-wrap">
+              <svg
+                class="search-icon"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                id="search-input"
+                placeholder="Search by name, email, or department..."
+                aria-label="Search members"
+              />
+            </div>
+            <div class="filter-chips">
+              <button class="chip active" data-filter="all">All</button>
+              <button class="chip" data-filter="Member">Members</button>
+              <button class="chip" data-filter="Worker">Workers</button>
+            </div>
+          </div>
+          <div id="members-grid"></div>
+        </div>
+
+        <!-- PAGE: REGISTER -->
+        <div class="page" id="page-register">
+          <div class="page-header">
+            <div>
+              <h2 class="page-title" id="form-page-title">Register Member</h2>
+              <p class="page-subtitle">
+                Add a new member or worker to the system
+              </p>
+            </div>
+          </div>
+          <div class="card form-card">
+            <form id="reg-form" novalidate>
+              <div class="form-section">
+                <h4 class="form-section-title">Personal Information</h4>
+                <div class="form-grid">
+                  <div class="form-field">
+                    <label class="field-label" for="f-fullName"
+                      >Full Name <span class="required">*</span></label
+                    >
+                    <input
+                      type="text"
+                      id="f-fullName"
+                      placeholder="e.g. Adaeze Okonkwo"
+                      autocomplete="name"
+                    />
+                    <span class="field-error" id="err-fullName"></span>
+                  </div>
+                  <div class="form-field">
+                    <label class="field-label" for="f-dob"
+                      >Date of Birth <span class="required">*</span></label
+                    >
+                    <input type="date" id="f-dob" />
+                    <span class="field-error" id="err-dob"></span>
+                  </div>
+                  <div class="form-field">
+                    <label class="field-label" for="f-role"
+                      >Role <span class="required">*</span></label
+                    >
+                    <select id="f-role">
+                      <option value="Member">Member</option>
+                      <option value="Worker">Worker</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="form-section">
+                <h4 class="form-section-title">Contact Details</h4>
+                <div class="form-grid">
+                  <div class="form-field">
+                    <label class="field-label" for="f-email"
+                      >Email Address <span class="required">*</span></label
+                    >
+                    <input
+                      type="email"
+                      id="f-email"
+                      placeholder="email@example.com"
+                      autocomplete="email"
+                    />
+                    <span class="field-error" id="err-email"></span>
+                  </div>
+                  <div class="form-field">
+                    <label class="field-label" for="f-phone"
+                      >Phone Number</label
+                    >
+                    <input
+                      type="tel"
+                      id="f-phone"
+                      placeholder="+234 801 234 5678"
+                      autocomplete="tel"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div class="form-section">
+                <h4 class="form-section-title">Church Details</h4>
+                <div class="form-grid">
+                  <div class="form-field">
+                    <label class="field-label" for="f-department"
+                      >Department / Unit</label
+                    >
+                    <select id="f-department">
+                      <option value="">— Select Department —</option>
+                      <option value="Choir">Choir</option>
+                      <option value="Ushers">Ushers</option>
+                      <option value="Technical Team">Technical Team</option>
+                      <option value="Children Ministry">
+                        Children Ministry
+                      </option>
+                      <option value="Drama Team">Drama Team</option>
+                      <option value="Prayer Team">Prayer Team</option>
+                      <option value="Protocol">Protocol</option>
+                      <option value="Media">Media</option>
+                      <option value="None">None / General</option>
+                    </select>
+                  </div>
+                  <div class="form-field">
+                    <label class="field-label" for="f-joined"
+                      >Date Joined</label
+                    >
+                    <input type="date" id="f-joined" />
+                  </div>
+                  <div class="form-field full-width">
+                    <label class="field-label" for="f-notes">Notes</label>
+                    <textarea
+                      id="f-notes"
+                      placeholder="Optional notes about this member..."
+                      rows="3"
+                    ></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="form-actions">
+                <button
+                  type="button"
+                  id="form-cancel-btn"
+                  class="btn-secondary"
+                  style="display: none"
+                >
+                  Cancel Edit
+                </button>
+                <button type="submit" id="form-submit-btn" class="btn-primary">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
+                    <path
+                      d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+                    />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                  </svg>
+                  Register Member
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- PAGE: BIRTHDAYS -->
+        <div class="page" id="page-birthdays">
+          <div class="page-header">
+            <div>
+              <h2 class="page-title">Birthday Tracker</h2>
+              <p class="page-subtitle">Today's and upcoming celebrations</p>
+            </div>
+          </div>
+          <div id="birthdays-content"></div>
+        </div>
+
+        <!-- PAGE: EXPORT -->
+        <div class="page" id="page-export">
+          <div class="page-header">
+            <div>
+              <h2 class="page-title">Export Data</h2>
+              <p class="page-subtitle">
+                Download or email member records as PDF or Excel
+              </p>
+            </div>
+            <div class="status-pill">
+              <div class="status-dot"></div>
+              <span id="export-live-count">0</span>&nbsp;records available
+            </div>
+          </div>
+
+          <div class="card export-builder-card">
+            <!-- Step 1: Role -->
+            <div class="export-step">
+              <div class="export-step-header">
+                <div class="export-step-num">1</div>
+                <div>
+                  <p class="export-step-title">Who to include</p>
+                  <p class="export-step-sub">Filter by member role</p>
+                </div>
+              </div>
+              <div class="export-toggle-group" id="export-role-group">
+                <button class="export-toggle active" data-value="all">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                  Everyone
+                </button>
+                <button class="export-toggle" data-value="Member">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  Members only
+                </button>
+                <button class="export-toggle" data-value="Worker">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                  Workers only
+                </button>
+              </div>
+            </div>
+
+            <div class="export-step-divider"></div>
+
+            <!-- Step 2: Birthday month range -->
+            <div class="export-step">
+              <div class="export-step-header">
+                <div class="export-step-num">2</div>
+                <div>
+                  <p class="export-step-title">
+                    Birthday month range
+                    <span class="export-optional">— optional</span>
+                  </p>
+                  <p class="export-step-sub">
+                    Filter by which month members celebrate their birthday —
+                    e.g. select January → March to export everyone born in Q1
+                  </p>
+                </div>
+              </div>
+              <div class="export-date-row">
+                <div class="export-date-field">
+                  <label class="export-date-label" for="export-month-from"
+                    >From</label
+                  >
+                  <select id="export-month-from" class="export-date-input">
+                    <option value="">Any month</option>
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
+                <div class="export-date-arrow">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </div>
+                <div class="export-date-field">
+                  <label class="export-date-label" for="export-month-to"
+                    >To</label
+                  >
+                  <select id="export-month-to" class="export-date-input">
+                    <option value="">Any month</option>
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
+                <button
+                  class="export-date-clear"
+                  id="export-date-clear"
+                  title="Clear month range"
+                >
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  Clear
+                </button>
+              </div>
+              <!-- AFTER — BUG FIX low#9: actionable warning text -->
+              <p
+                class="export-date-warning"
+                id="export-date-warning"
+                style="display: none"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+                  />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                "From" month is after "To" month — swap them or clear the range.
+              </p>
+            </div>
+
+            <div class="export-step-divider"></div>
+
+            <!-- Step 3: Format -->
+            <div class="export-step">
+              <div class="export-step-header">
+                <div class="export-step-num">3</div>
+                <div>
+                  <p class="export-step-title">File format</p>
+                  <p class="export-step-sub">
+                    Choose how you want the data structured
+                  </p>
+                </div>
+              </div>
+              <div class="export-format-grid" id="export-format-group">
+                <button class="export-format-card active" data-value="pdf">
+                  <div class="export-format-top">
+                    <div class="export-format-icon efmt-pdf">
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <path
+                          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                        />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                      </svg>
+                    </div>
+                    <div class="export-format-check" id="check-pdf">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p class="export-format-name">PDF</p>
+                  <p class="export-format-desc">
+                    Formatted table, church header, ready to print or share
+                  </p>
+                </button>
+                <button class="export-format-card" data-value="xlsx">
+                  <div class="export-format-top">
+                    <div class="export-format-icon efmt-xlsx">
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                        <line x1="3" y1="15" x2="21" y2="15" />
+                        <line x1="9" y1="9" x2="9" y2="21" />
+                        <line x1="15" y1="9" x2="15" y2="21" />
+                      </svg>
+                    </div>
+                    <div
+                      class="export-format-check"
+                      id="check-xlsx"
+                      style="display: none"
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="3"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p class="export-format-name">Excel</p>
+                  <p class="export-format-desc">
+                    Editable spreadsheet with all fields, perfect for analysis
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div class="export-step-divider"></div>
+
+            <!-- Step 4: Delivery -->
+            <div class="export-step">
+              <div class="export-step-header">
+                <div class="export-step-num">4</div>
+                <div>
+                  <p class="export-step-title">Delivery method</p>
+                  <p class="export-step-sub">
+                    Download immediately or send to admin email
+                  </p>
+                </div>
+              </div>
+              <div class="export-delivery-cards" id="export-delivery-group">
+                <button
+                  class="export-delivery-card active"
+                  data-value="download"
+                >
+                  <div class="export-delivery-icon">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </div>
+                  <div class="export-delivery-text">
+                    <p class="export-delivery-title">Download to device</p>
+                    <p class="export-delivery-sub">
+                      File saves directly to your browser's download folder
+                    </p>
+                  </div>
+                  <div class="export-delivery-radio" id="radio-download">
+                    <div class="export-delivery-radio-dot"></div>
+                  </div>
+                </button>
+                <button class="export-delivery-card" data-value="email">
+                  <div class="export-delivery-icon">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+                      />
+                      <polyline points="22,6 12,12 2,6" />
+                    </svg>
+                  </div>
+                  <div class="export-delivery-text">
+                    <p class="export-delivery-title">Send to admin email</p>
+                    <p class="export-delivery-sub">
+                      File attached and emailed via Cloud Function (Blaze plan)
+                    </p>
+                  </div>
+                  <div
+                    class="export-delivery-radio"
+                    id="radio-email"
+                    style="border-color: var(--border)"
+                  >
+                    <div
+                      class="export-delivery-radio-dot"
+                      style="display: none"
+                    ></div>
+                  </div>
+                </button>
+              </div>
+              <div
+                id="export-blaze-notice"
+                class="export-blaze-notice"
+                style="display: none"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  style="flex-shrink: 0; margin-top: 1px"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                Email delivery requires Firebase Blaze (pay-as-you-go) plan and
+                a deployed <code>sendExportEmail</code> Cloud Function. The
+                button will simulate sending until you upgrade.
+              </div>
+            </div>
+          </div>
+
+          <!-- Summary + Action -->
+          <div class="card export-summary-card">
+            <div class="export-summary-left">
+              <div class="export-summary-count">
+                <span class="export-summary-num" id="export-summary-num"
+                  >0</span
+                >
+                <span class="export-summary-label" id="export-summary-label"
+                  >records</span
+                >
+              </div>
+              <div class="export-summary-meta" id="export-summary-meta">
+                — — —
+              </div>
+            </div>
+            <div class="export-summary-right">
+              <button class="btn-primary export-run-btn" id="export-run-btn">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span id="export-run-text">Export PDF</span>
+                <span
+                  id="export-run-spinner"
+                  class="btn-spinner"
+                  style="display: none"
+                ></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Export History -->
+          <div class="card" style="margin-top: 0">
+            <div class="card-header">
+              <h3 class="card-title">Export History</h3>
+              <span class="card-subtitle">This session only</span>
+            </div>
+            <div id="export-history-list">
+              <div class="empty-state small">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <p>No exports yet this session</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- END PAGE: EXPORT -->
+      </main>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
