@@ -1,20 +1,20 @@
-const functions = require("firebase-functions");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const {
+  onDocumentCreated,
+  onDocumentDeleted,
+} = require("firebase-functions/v2/firestore");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
 admin.initializeApp();
 const db = admin.firestore();
 
-const GMAIL_USER = functions.config().gmail.user;
-const GMAIL_PASS = functions.config().gmail.pass;
-const ADMIN_EMAIL = functions.config().admin.email;
+const GMAIL_USER = defineSecret("GMAIL_USER");
+const GMAIL_PASS = defineSecret("GMAIL_PASS");
+const ADMIN_EMAIL = defineSecret("ADMIN_EMAIL");
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: { user: GMAIL_USER, pass: GMAIL_PASS },
-});
-
-// ── HELPER: check if birthday email already sent this year ──
+// ── HELPER: check if email already sent this year ──
 async function alreadySentThisYear(memberId, year, type = "birthday") {
   const snap = await db
     .collection("emailLogs")
@@ -36,10 +36,22 @@ async function writeLog(memberId, year, type = "birthday") {
 }
 
 // ── FUNCTION 1: Daily birthday check at 8AM Lagos time ──
-exports.checkBirthdaysDaily = functions.pubsub
-  .schedule("every day 08:00")
-  .timeZone("Africa/Lagos")
-  .onRun(async () => {
+exports.checkBirthdaysDaily = onSchedule(
+  {
+    schedule: "every day 08:00",
+    timeZone: "Africa/Lagos",
+    secrets: ["GMAIL_USER", "GMAIL_PASS", "ADMIN_EMAIL"],
+  },
+  async () => {
+    const gmailUser = GMAIL_USER.value();
+    const gmailPass = GMAIL_PASS.value();
+    const adminEmail = ADMIN_EMAIL.value();
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: gmailUser, pass: gmailPass },
+    });
+
     const now = new Date();
     const todayDay = now.getDate();
     const todayMon = now.getMonth() + 1;
@@ -53,13 +65,10 @@ exports.checkBirthdaysDaily = functions.pubsub
 
     for (const doc of snapshot.docs) {
       const member = { id: doc.id, ...doc.data() };
-
       try {
         if (!member.dob || !member.email) continue;
-
         const [, bm, bd] = member.dob.split("-").map(Number);
 
-        // ── Birthday today → email the member ──
         if (bd === todayDay && bm === todayMon) {
           const sent = await alreadySentThisYear(
             member.id,
@@ -68,14 +77,14 @@ exports.checkBirthdaysDaily = functions.pubsub
           );
           if (!sent) {
             await transporter.sendMail({
-              from: `"RCCG Church" <${GMAIL_USER}>`,
+              from: `"RCCG Immanuel" <${gmailUser}>`,
               to: member.email,
-              subject: "Happy Birthday from RCCG!",
+              subject: "Happy Birthday from RCCG Immanuel!",
               html: `
                 <h2>Happy Birthday, ${member.fullName}! 🎂</h2>
-                <p>The entire RCCG family celebrates you today.</p>
+                <p>The entire RCCG Immanuel family celebrates you today.</p>
                 <p>May this year bring you joy, health, and abundant blessings.</p>
-                <p>With love,<br/>RCCG Church Administration</p>
+                <p>With love,<br/>Parish Administration</p>
               `,
             });
             await writeLog(member.id, currentYear, "birthday");
@@ -83,10 +92,6 @@ exports.checkBirthdaysDaily = functions.pubsub
           }
         }
 
-        // ── Birthday tomorrow → notify admin (deduplicated per year) ──
-        // BUG FIX fn#2: admin was notified every single day the cron ran for
-        // the same "tomorrow" birthday because there was no deduplication log.
-        // Now uses the same emailLogs pattern with type "admin-tomorrow-notice".
         if (bd === tomorrowDay && bm === tomorrowMon) {
           const alreadyNotified = await alreadySentThisYear(
             member.id,
@@ -95,8 +100,8 @@ exports.checkBirthdaysDaily = functions.pubsub
           );
           if (!alreadyNotified) {
             await transporter.sendMail({
-              from: `"RCCG Church" <${GMAIL_USER}>`,
-              to: ADMIN_EMAIL,
+              from: `"RCCG Immanuel" <${gmailUser}>`,
+              to: adminEmail,
               subject: `Birthday tomorrow: ${member.fullName}`,
               html: `
                 <p><b>${member.fullName}</b> (${
@@ -110,58 +115,65 @@ exports.checkBirthdaysDaily = functions.pubsub
         }
       } catch (err) {
         console.error(`Failed processing ${member.fullName}:`, err.message);
-        // continues to next member
       }
     }
+  }
+);
 
-    return null;
-  });
-
-// ── FUNCTION 2: Welcome email when new member is registered ──
-// BUG FIX fn#1: missing `return` after sendMail — the promise chain was not
-// returned, causing Firebase to log unhandled promise termination warnings.
-exports.sendWelcomeEmail = functions.firestore
-  .document("members/{memberId}")
-  .onCreate(async (snap) => {
-    const member = snap.data();
+// ── FUNCTION 2: Welcome email on new member registration ──
+exports.sendWelcomeEmail = onDocumentCreated(
+  { document: "members/{memberId}", secrets: ["GMAIL_USER", "GMAIL_PASS"] },
+  async (event) => {
+    const member = event.data.data();
     if (!member.email) return null;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: GMAIL_USER.value(), pass: GMAIL_PASS.value() },
+    });
 
     try {
       await transporter.sendMail({
-        from: `"RCCG Church" <${GMAIL_USER}>`,
+        from: `"RCCG Immanuel" <${GMAIL_USER.value()}>`,
         to: member.email,
-        subject: "Welcome to RCCG Member Docs!",
+        subject: "Welcome to RCCG Immanuel!",
         html: `
           <h2>Welcome, ${member.fullName}! 🙏</h2>
-          <p>You have been registered in the RCCG Church Documentation System.</p>
+          <p>You have been registered in the RCCG Immanuel Parish system.</p>
           <p>God bless you!</p>
-          <p>RCCG Church Administration</p>
+          <p>Parish Administration</p>
         `,
       });
       console.log(`Welcome email sent to ${member.fullName}`);
-      return null; // BUG FIX fn#1: explicit return after await
     } catch (err) {
       console.error(
         `Failed sending welcome email to ${member.fullName}:`,
         err.message
       );
-      return null;
     }
-  });
+    return null;
+  }
+);
 
-// ── FUNCTION 3: Notify admin + clean up emailLogs when member is deleted ──
-// BUG FIX fn#3: member.email could be undefined, rendering "undefined" in the
-// email body. Now uses a null-safe fallback: member.email || "N/A".
-exports.notifyAdminMemberDeleted = functions.firestore
-  .document("members/{memberId}")
-  .onDelete(async (snap, context) => {
-    const member = snap.data();
-    const memberId = context.params.memberId;
+// ── FUNCTION 3: Notify admin + clean up logs when member is deleted ──
+exports.notifyAdminMemberDeleted = onDocumentDeleted(
+  {
+    document: "members/{memberId}",
+    secrets: ["GMAIL_USER", "GMAIL_PASS", "ADMIN_EMAIL"],
+  },
+  async (event) => {
+    const member = event.data.data();
+    const memberId = event.params.memberId;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: GMAIL_USER.value(), pass: GMAIL_PASS.value() },
+    });
 
     try {
       await transporter.sendMail({
-        from: `"RCCG Church" <${GMAIL_USER}>`,
-        to: ADMIN_EMAIL,
+        from: `"RCCG Immanuel" <${GMAIL_USER.value()}>`,
+        to: ADMIN_EMAIL.value(),
         subject: `Member Deleted: ${member.fullName}`,
         html: `
           <p>The following member was removed from the system:</p>
@@ -180,7 +192,6 @@ exports.notifyAdminMemberDeleted = functions.firestore
         .collection("emailLogs")
         .where("memberId", "==", memberId)
         .get();
-
       const batch = db.batch();
       logs.forEach((logDoc) => batch.delete(logDoc.ref));
       await batch.commit();
@@ -191,4 +202,5 @@ exports.notifyAdminMemberDeleted = functions.firestore
         err.message
       );
     }
-  });
+  }
+);
