@@ -7,7 +7,6 @@ import {
   confirmPasswordReset,
   verifyPasswordResetCode,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-// BUG FIX med#5: added setDoc for idempotent attendance writes
 import {
   collection,
   onSnapshot,
@@ -19,10 +18,29 @@ import {
   Timestamp,
   query,
   orderBy,
-  limit,
   enableNetwork,
   disableNetwork,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ══════════════════════════════════════════════════════════════
+//  GLOBAL UNHANDLED PROMISE ERROR HANDLER  (BUG FIX med#11)
+// ══════════════════════════════════════════════════════════════
+window.addEventListener("unhandledrejection", (event) => {
+  console.error("Unhandled promise rejection:", event.reason);
+});
+
+// ══════════════════════════════════════════════════════════════
+//  XSS HELPER  (BUG FIX med#13)
+// ══════════════════════════════════════════════════════════════
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 // ══════════════════════════════════════════════════════════════
 //  TOAST NOTIFICATION SYSTEM
@@ -96,7 +114,7 @@ offlineBannerClose.addEventListener("click", () => {
 });
 
 window.addEventListener("online", () => {
-  manuallyDismissed = false; // BUG FIX high#1: reset so banner shows again on next disconnect
+  manuallyDismissed = false;
   hideOfflineBanner();
   updateSyncTime();
 });
@@ -127,7 +145,6 @@ function handleEmailAction() {
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode");
   const oobCode = params.get("oobCode");
-
   if (mode === "resetPassword" && oobCode) {
     showPasswordResetForm(oobCode);
   }
@@ -140,19 +157,10 @@ function showPasswordResetForm(oobCode) {
   const resetScreen = document.createElement("div");
   resetScreen.id = "reset-screen";
   resetScreen.style.cssText = `
-  min-height:100vh;
-  width:100vw;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:20px;
-  position:fixed;
-  top:0;
-  left:0;
-  z-index:99999;
-  overflow:hidden;
-  background: linear-gradient(135deg, #0f2147 0%, #1a3368 50%, #0a1a3a 100%);
-`;
+    min-height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;
+    padding:20px;position:fixed;top:0;left:0;z-index:99999;overflow:hidden;
+    background:linear-gradient(135deg,#0f2147 0%,#1a3368 50%,#0a1a3a 100%);
+  `;
 
   resetScreen.innerHTML = `
     <div style="position:absolute;inset:0;z-index:0;pointer-events:none;">
@@ -177,20 +185,14 @@ function showPasswordResetForm(oobCode) {
       <div class="login-field">
         <label class="field-label" for="new-password">New Password</label>
         <div class="input-wrap">
-          <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
+          <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <input type="password" id="new-password" placeholder="Enter new password" />
         </div>
       </div>
       <div class="login-field">
         <label class="field-label" for="confirm-password">Confirm Password</label>
         <div class="input-wrap">
-          <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
+          <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <input type="password" id="confirm-password" placeholder="Confirm new password" />
         </div>
       </div>
@@ -200,9 +202,7 @@ function showPasswordResetForm(oobCode) {
         <span id="reset-confirm-spinner" class="btn-spinner" style="display:none"></span>
       </button>
       <p class="login-secure-note">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-        </svg>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
         Secure access — authorized personnel only
       </p>
     </div>
@@ -217,7 +217,6 @@ function showPasswordResetForm(oobCode) {
       errEl.textContent =
         "This reset link has expired or already been used. Please request a new one.";
     if (btn) btn.disabled = true;
-    // Do NOT remove the screen or redirect — let the user see the error
   });
 
   document
@@ -231,7 +230,6 @@ function showPasswordResetForm(oobCode) {
       const btn = document.getElementById("reset-confirm-btn");
 
       errorEl.textContent = "";
-
       if (!newPassword || newPassword.length < 6) {
         errorEl.textContent = "Password must be at least 6 characters.";
         return;
@@ -297,13 +295,18 @@ const pageTitles = {
   members: "Members",
   register: "Register Member",
   birthdays: "Birthdays",
+  attendance: "Attendance",
   export: "Export Data",
 };
 
-// BUG FIX js#3 + js#4: removed "announcements" from navigateTo —
-// the page element and nav item don't exist in index.html, so calling
-// updateAnnouncementRecipientCount() here threw null-access errors.
 function navigateTo(pageId) {
+  if (pageId !== "register" && formIsDirty()) {
+    const confirmed = confirm(
+      "You have unsaved changes in the registration form. Leave anyway?"
+    );
+    if (!confirmed) return;
+  }
+
   pages.forEach((p) => p.classList.remove("active"));
   navItems.forEach((n) => {
     n.classList.remove("active");
@@ -320,15 +323,13 @@ function navigateTo(pageId) {
   }
 
   if (mobileTitleEl) mobileTitleEl.textContent = pageTitles[pageId] || "";
-
   if (pageId !== "register") resetForm();
-
   closeMobileSidebar();
 
-  // CORRECT
   if (pageId === "dashboard") requestAnimationFrame(() => renderDashboard());
   if (pageId === "members") applyFilters();
   if (pageId === "birthdays") renderBirthdaysPage();
+  if (pageId === "attendance") renderAttendancePage();
   if (pageId === "export") initExportPage();
 }
 
@@ -461,7 +462,7 @@ resetEmailInput.addEventListener("keydown", (e) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-//  SESSION TIMEOUT
+//  SESSION TIMEOUT  (BUG FIX med#7: mousemove throttled to 30s)
 // ══════════════════════════════════════════════════════════════
 const SESSION_IDLE_MS = 25 * 60 * 1000;
 const SESSION_GRACE_MS = 5 * 60 * 1000;
@@ -473,6 +474,14 @@ const sessionLogoutBtn = document.getElementById("session-logout-btn");
 let idleTimer = null;
 let countdownInterval = null;
 let graceSecondsLeft = 0;
+
+let _lastMouseMoveReset = 0;
+function throttledMouseMoveReset() {
+  const now = Date.now();
+  if (now - _lastMouseMoveReset < 30_000) return;
+  _lastMouseMoveReset = now;
+  resetIdleTimer();
+}
 
 function resetIdleTimer() {
   clearTimeout(idleTimer);
@@ -501,29 +510,25 @@ function dismissSessionWarning() {
   countdownInterval = null;
   sessionWarningModal.style.display = "none";
   document.body.style.overflow = "";
-  document.body.classList.remove("offline-active"); // safety net
+  document.body.classList.remove("offline-active");
 }
 
 sessionStayBtn.addEventListener("click", () => {
   dismissSessionWarning();
   resetIdleTimer();
 });
-
 sessionLogoutBtn.addEventListener("click", () => {
   dismissSessionWarning();
   signOut(auth);
 });
 
-const IDLE_EVENTS = [
-  "mousemove",
-  "keydown",
-  "mousedown",
-  "touchstart",
-  "scroll",
-];
+const IDLE_EVENTS_DIRECT = ["keydown", "mousedown", "touchstart", "scroll"];
 
 function startIdleTracking() {
-  IDLE_EVENTS.forEach((evt) =>
+  document.addEventListener("mousemove", throttledMouseMoveReset, {
+    passive: true,
+  });
+  IDLE_EVENTS_DIRECT.forEach((evt) =>
     document.addEventListener(evt, resetIdleTimer, { passive: true })
   );
   resetIdleTimer();
@@ -532,7 +537,8 @@ function startIdleTracking() {
 function stopIdleTracking() {
   clearTimeout(idleTimer);
   clearInterval(countdownInterval);
-  IDLE_EVENTS.forEach((evt) =>
+  document.removeEventListener("mousemove", throttledMouseMoveReset);
+  IDLE_EVENTS_DIRECT.forEach((evt) =>
     document.removeEventListener(evt, resetIdleTimer)
   );
   dismissSessionWarning();
@@ -561,10 +567,9 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
 // ══════════════════════════════════════════════════════════════
 //  AUTH STATE
 // ══════════════════════════════════════════════════════════════
-let unsubscribe = null;
+let unsubscribeMembers = null;
 let unsubscribeAttendance = null;
 
-// AFTER — guard: if a password reset screen is active, don't interfere
 onAuthStateChanged(auth, (user) => {
   if (document.getElementById("reset-screen")) return;
 
@@ -579,7 +584,6 @@ onAuthStateChanged(auth, (user) => {
     setGreeting();
     startRealtimeListener();
     startAttendanceListener();
-    startNoticesListener();
     startIdleTracking();
     navigateTo("dashboard");
   } else {
@@ -588,9 +592,9 @@ onAuthStateChanged(auth, (user) => {
 
     stopIdleTracking();
 
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
+    if (unsubscribeMembers) {
+      unsubscribeMembers();
+      unsubscribeMembers = null;
     }
     if (unsubscribeAttendance) {
       unsubscribeAttendance();
@@ -620,11 +624,8 @@ function setGreeting() {
 // ══════════════════════════════════════════════════════════════
 let allMembers = [];
 
-// BUG FIX js#4: removed updateAnnouncementRecipientCount() call —
-// that function queries #ann-recipient-count which doesn't exist in the HTML,
-// throwing a null-access error on every Firestore snapshot update.
 function startRealtimeListener() {
-  unsubscribe = onSnapshot(
+  unsubscribeMembers = onSnapshot(
     collection(db, "members"),
     (snapshot) => {
       allMembers = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -663,9 +664,15 @@ function getInitials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+// BUG FIX med#12: guard against malformed date strings
 function formatDate(dateStr) {
   if (!dateStr) return "—";
-  const [y, m, d] = dateStr.split("-");
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return "—";
+  const [y, m, d] = parts;
+  const month = parseInt(m, 10);
+  const day = parseInt(d, 10);
+  if (isNaN(month) || isNaN(day) || month < 1 || month > 12) return "—";
   const months = [
     "Jan",
     "Feb",
@@ -680,7 +687,7 @@ function formatDate(dateStr) {
     "Nov",
     "Dec",
   ];
-  return `${parseInt(d)} ${months[parseInt(m) - 1]} ${y}`;
+  return `${day} ${months[month - 1]} ${y}`;
 }
 
 function formatDayMonth(dateStr) {
@@ -707,11 +714,39 @@ function formatDayMonth(dateStr) {
   return `${day} ${months[month - 1]}`;
 }
 
+function formatShortDate(dateStr) {
+  if (!dateStr) return "";
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return "";
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (isNaN(m) || isNaN(d)) return "";
+  return `${d} ${months[m - 1]}`;
+}
+
 function getDaysUntilBirthday(dobStr) {
   if (!dobStr) return null;
+  const parts = dobStr.split("-");
+  if (parts.length < 3) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const [, bm, bd] = dobStr.split("-").map(Number);
+  const bm = parseInt(parts[1], 10);
+  const bd = parseInt(parts[2], 10);
+  if (isNaN(bm) || isNaN(bd)) return null;
   let bday = new Date(today.getFullYear(), bm - 1, bd);
   if (bday < today) bday.setFullYear(today.getFullYear() + 1);
   return Math.round((bday - today) / 86400000);
@@ -719,8 +754,11 @@ function getDaysUntilBirthday(dobStr) {
 
 function isBirthdayToday(dobStr) {
   if (!dobStr) return false;
+  const parts = dobStr.split("-");
+  if (parts.length < 3) return false;
+  const bm = parseInt(parts[1], 10);
+  const bd = parseInt(parts[2], 10);
   const today = new Date();
-  const [, bm, bd] = dobStr.split("-").map(Number);
   return bm === today.getMonth() + 1 && bd === today.getDate();
 }
 
@@ -734,22 +772,28 @@ function renderDashboard() {
     isBirthdayToday(p.dob)
   ).length;
   const total = allMembers.length;
+  const totalMales = allMembers.filter((p) => p.gender === "Male").length;
+  const totalFemales = allMembers.filter((p) => p.gender === "Female").length;
 
   animateCounter("stat-members", totalMembers);
   animateCounter("stat-workers", totalWorkers);
   animateCounter("stat-birthdays-today", birthdaysToday);
   animateCounter("stat-total", total);
+  animateCounter("stat-males", totalMales);
+  animateCounter("stat-females", totalFemales);
 
+  // Birthday banner
   const bannerEl = document.getElementById("birthday-banner");
   const todayBirthdays = allMembers.filter((p) => isBirthdayToday(p.dob));
   if (todayBirthdays.length > 0) {
-    const names = todayBirthdays.map((p) => p.fullName).join(", ");
+    const names = todayBirthdays.map((p) => escapeHtml(p.fullName)).join(", ");
     bannerEl.innerHTML = `🎂 <span>Birthday today: <strong>${names}</strong> — don't forget to celebrate!</span>`;
     bannerEl.style.display = "flex";
   } else {
     bannerEl.style.display = "none";
   }
 
+  // Upcoming birthdays (next 7 days)
   const upcomingEl = document.getElementById("upcoming-birthdays-list");
   const upcoming = allMembers
     .map((p) => ({ ...p, daysLeft: getDaysUntilBirthday(p.dob) }))
@@ -765,9 +809,9 @@ function renderDashboard() {
       <div class="birthday-row">
         <div class="birthday-avatar">${getInitials(p.fullName)}</div>
         <div class="birthday-info">
-          <div class="birthday-name">${p.fullName}</div>
-          <div class="birthday-meta">${p.role}${
-          p.department ? ` · ${p.department}` : ""
+          <div class="birthday-name">${escapeHtml(p.fullName)}</div>
+          <div class="birthday-meta">${escapeHtml(p.role)}${
+          p.department ? ` · ${escapeHtml(p.department)}` : ""
         }</div>
         </div>
         <span class="birthday-days">${
@@ -779,6 +823,7 @@ function renderDashboard() {
       .join("");
   }
 
+  // Recent members
   const recentEl = document.getElementById("recent-members-list");
   const recent = [...allMembers]
     .filter((p) => p.createdAt)
@@ -796,9 +841,9 @@ function renderDashboard() {
           p.role === "Worker" ? "worker" : ""
         }">${getInitials(p.fullName)}</div>
         <div class="member-row-info">
-          <div class="member-row-name">${p.fullName}</div>
-          <div class="member-row-meta">${p.role}${
-          p.department ? ` · ${p.department}` : ""
+          <div class="member-row-name">${escapeHtml(p.fullName)}</div>
+          <div class="member-row-meta">${escapeHtml(p.role)}${
+          p.department ? ` · ${escapeHtml(p.department)}` : ""
         }</div>
         </div>
       </div>
@@ -807,28 +852,22 @@ function renderDashboard() {
       .join("");
   }
 
-  requestAnimationFrame(() => {
-    renderAttendanceChart();
-  });
+  requestAnimationFrame(() => renderGenderQuarterlyChart());
 }
 
 function animateCounter(elId, target) {
   const el = document.getElementById(elId);
   if (!el) return;
-
-  // Cancel any in-progress animation on this element
   if (el._countTimer) {
     clearInterval(el._countTimer);
     el._countTimer = null;
   }
-
-  if (el.querySelector(".skeleton")) el.innerHTML = "0";
+  if (el.querySelector && el.querySelector(".skeleton")) el.innerHTML = "0";
   const current = parseInt(el.textContent) || 0;
   if (current === target) {
     el.textContent = target;
     return;
   }
-
   const step = Math.ceil(Math.abs(target - current) / 20);
   let val = current;
   el._countTimer = setInterval(() => {
@@ -842,6 +881,189 @@ function animateCounter(elId, target) {
       el._countTimer = null;
     }
   }, 30);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  QUARTERLY GENDER CHART (Dashboard)
+//  BUG FIX med#8: resize debounced at 150ms
+// ══════════════════════════════════════════════════════════════
+let _genderChartResizeTimer = null;
+
+function renderGenderQuarterlyChart() {
+  const canvas = document.getElementById("gender-quarterly-chart");
+  const emptyEl = document.getElementById("gender-quarterly-empty");
+  if (!canvas) return;
+
+  const now = new Date();
+  const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+  const currentYear = now.getFullYear();
+
+  const quarters = [];
+  for (let q = 1; q <= currentQuarter; q++) {
+    quarters.push({ label: `Q${q}`, male: 0, female: 0 });
+  }
+
+  allMembers.forEach((m) => {
+    if (!m.createdAt) return;
+    const created = m.createdAt.toDate
+      ? m.createdAt.toDate()
+      : new Date(m.createdAt.seconds * 1000);
+    if (created.getFullYear() !== currentYear) return;
+    const q = Math.floor(created.getMonth() / 3);
+    if (q >= quarters.length) return;
+    if (m.gender === "Male") quarters[q].male += 1;
+    else if (m.gender === "Female") quarters[q].female += 1;
+  });
+
+  const hasData = quarters.some((q) => q.male > 0 || q.female > 0);
+  if (!hasData) {
+    canvas.style.display = "none";
+    if (emptyEl) emptyEl.style.display = "flex";
+    return;
+  }
+  canvas.style.display = "block";
+  if (emptyEl) emptyEl.style.display = "none";
+
+  _drawGenderChart(canvas, quarters);
+
+  if (!canvas._resizeHandler) {
+    canvas._resizeHandler = () => {
+      clearTimeout(_genderChartResizeTimer);
+      _genderChartResizeTimer = setTimeout(() => {
+        _drawGenderChart(canvas, quarters);
+      }, 150);
+    };
+    window.addEventListener("resize", canvas._resizeHandler);
+  }
+}
+
+function _drawGenderChart(canvas, quarters) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth || 560;
+  const H = 200;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const NAVY = "#0f2147";
+  const GOLD = "#d4a017";
+  const BORDER = "#e2e8f5";
+  const MUTED = "#8a94a8";
+  const PAD_L = 38,
+    PAD_R = 12,
+    PAD_T = 28,
+    PAD_B = 36;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+
+  const maxVal = Math.max(...quarters.map((q) => q.male + q.female), 1);
+  const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD_T + chartH - (i / 4) * chartH;
+    ctx.strokeStyle = BORDER;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, y);
+    ctx.lineTo(PAD_L + chartW, y);
+    ctx.stroke();
+    ctx.fillStyle = MUTED;
+    ctx.font = "10px Sora, system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(Math.round((i / 4) * yMax), PAD_L - 4, y + 3);
+  }
+
+  const gap = 16;
+  const barW = Math.min(
+    60,
+    (chartW - gap * (quarters.length + 1)) / quarters.length
+  );
+
+  quarters.forEach((q, i) => {
+    const x =
+      PAD_L +
+      gap +
+      i * ((chartW - gap * (quarters.length - 1)) / quarters.length) +
+      ((chartW - gap * (quarters.length - 1)) / quarters.length - barW) / 2;
+    const baseY = PAD_T + chartH;
+    const maleH = (q.male / yMax) * chartH;
+    const femH = (q.female / yMax) * chartH;
+
+    if (femH > 0) {
+      ctx.fillStyle = GOLD;
+      ctx.beginPath();
+      if (maleH === 0) {
+        const r = Math.min(4, barW / 2, femH);
+        ctx.moveTo(x + r, baseY - femH);
+        ctx.lineTo(x + barW - r, baseY - femH);
+        ctx.quadraticCurveTo(
+          x + barW,
+          baseY - femH,
+          x + barW,
+          baseY - femH + r
+        );
+        ctx.lineTo(x + barW, baseY);
+        ctx.lineTo(x, baseY);
+        ctx.lineTo(x, baseY - femH + r);
+        ctx.quadraticCurveTo(x, baseY - femH, x + r, baseY - femH);
+      } else {
+        ctx.rect(x, baseY - maleH - femH, barW, femH);
+      }
+      ctx.fill();
+    }
+    if (maleH > 0) {
+      ctx.fillStyle = NAVY;
+      ctx.beginPath();
+      const r = Math.min(4, barW / 2, maleH);
+      if (femH === 0) {
+        ctx.moveTo(x + r, baseY - maleH);
+        ctx.lineTo(x + barW - r, baseY - maleH);
+        ctx.quadraticCurveTo(
+          x + barW,
+          baseY - maleH,
+          x + barW,
+          baseY - maleH + r
+        );
+        ctx.lineTo(x + barW, baseY);
+        ctx.lineTo(x, baseY);
+        ctx.lineTo(x, baseY - maleH + r);
+        ctx.quadraticCurveTo(x, baseY - maleH, x + r, baseY - maleH);
+      } else {
+        ctx.rect(x, baseY - maleH, barW, maleH);
+      }
+      ctx.fill();
+    }
+
+    ctx.fillStyle = MUTED;
+    ctx.font = "10px Sora, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(q.label, x + barW / 2, H - PAD_B + 14);
+
+    const stackH = maleH + femH;
+    if (stackH > 14) {
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 9px Sora, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(q.male + q.female, x + barW / 2, baseY - stackH / 2 + 3);
+    }
+  });
+
+  const legY = PAD_T - 14;
+  ctx.fillStyle = NAVY;
+  ctx.fillRect(PAD_L + 2, legY, 10, 8);
+  ctx.fillStyle = MUTED;
+  ctx.font = "9px Sora, system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Male", PAD_L + 15, legY + 7);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(PAD_L + 55, legY, 10, 8);
+  ctx.fillStyle = MUTED;
+  ctx.fillText("Female", PAD_L + 68, legY + 7);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -861,15 +1083,15 @@ filterChips.forEach((chip) => {
 });
 
 function applyFilters() {
-  const query = searchInput.value.toLowerCase();
+  const q = searchInput.value.toLowerCase();
   const activeChip = document.querySelector(".chip.active");
   const roleFilter = activeChip ? activeChip.dataset.filter : "all";
 
   const filtered = allMembers.filter((p) => {
     const matchSearch =
-      p.fullName?.toLowerCase().includes(query) ||
-      p.email?.toLowerCase().includes(query) ||
-      p.department?.toLowerCase().includes(query);
+      p.fullName?.toLowerCase().includes(q) ||
+      p.email?.toLowerCase().includes(q) ||
+      p.department?.toLowerCase().includes(q);
     const matchRole = roleFilter === "all" || p.role === roleFilter;
     return matchSearch && matchRole;
   });
@@ -885,7 +1107,7 @@ function applyFilters() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MEMBERS GRID
+//  MEMBERS GRID  (BUG FIX med#13: escapeHtml on all user data)
 // ══════════════════════════════════════════════════════════════
 function renderMembersGrid(list) {
   const grid = document.getElementById("members-grid");
@@ -910,28 +1132,28 @@ function renderMembersGrid(list) {
   grid.innerHTML = list
     .map(
       (person) => `
-    <div class="member-card" data-id="${person.id}">
+    <div class="member-card" data-id="${escapeHtml(person.id)}">
       <div class="member-card-head">
         <div class="member-avatar ${
           person.role === "Worker" ? "worker" : ""
         }">${getInitials(person.fullName)}</div>
         <div>
-          <div class="member-card-name">${person.fullName}</div>
+          <div class="member-card-name">${escapeHtml(person.fullName)}</div>
           <span class="role-pill ${
             person.role === "Worker" ? "worker" : "member"
-          }">${person.role}</span>
+          }">${escapeHtml(person.role)}</span>
         </div>
       </div>
       <div class="member-card-detail">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,12 2,6"/></svg>
-        ${person.email}
+        ${escapeHtml(person.email)}
       </div>
       ${
         person.phone
           ? `
       <div class="member-card-detail">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.21 15a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-        ${person.phone}
+        ${escapeHtml(person.phone)}
       </div>`
           : ""
       }
@@ -940,20 +1162,29 @@ function renderMembersGrid(list) {
         DOB: ${formatDate(person.dob)}
       </div>
       ${
+        person.gender
+          ? `
+      <div class="member-card-detail">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v1h16v-1c0-1.5-3-4-8-4z"/></svg>
+        ${escapeHtml(person.gender)}
+      </div>`
+          : ""
+      }
+      ${
         person.department
           ? `
       <div class="member-card-detail">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        ${person.department}
+        ${escapeHtml(person.department)}
       </div>`
           : ""
       }
       <div class="member-card-footer">
-        <button class="btn-edit" data-id="${person.id}">
+        <button class="btn-edit" data-id="${escapeHtml(person.id)}">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Edit
         </button>
-        <button class="btn-delete" data-id="${person.id}">
+        <button class="btn-delete" data-id="${escapeHtml(person.id)}">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           Delete
         </button>
@@ -990,7 +1221,7 @@ function renderMembersGrid(list) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  PROFILE DRAWER
+//  PROFILE DRAWER  (BUG FIX med#13: escapeHtml; Date Joined removed; Gender added)
 // ══════════════════════════════════════════════════════════════
 const profileOverlay = document.getElementById("profile-overlay");
 const profileContent = document.getElementById("profile-content");
@@ -1000,23 +1231,25 @@ function openProfileDrawer(person) {
   const roleClass = person.role === "Worker" ? "worker" : "";
   profileContent.innerHTML = `
     <div class="profile-avatar-lg">${getInitials(person.fullName)}</div>
-    <div class="profile-name">${person.fullName}</div>
-    <span class="profile-role-tag ${roleClass}">${person.role}</span>
+    <div class="profile-name">${escapeHtml(person.fullName)}</div>
+    <span class="profile-role-tag ${roleClass}">${escapeHtml(
+    person.role
+  )}</span>
     <div class="profile-details">
       <div class="profile-detail-row">
         <div class="profile-detail-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,12 2,6"/></svg></div>
         <div class="profile-detail-content">
           <div class="profile-detail-label">Email</div>
-          <div class="profile-detail-value">${person.email}</div>
+          <div class="profile-detail-value">${escapeHtml(person.email)}</div>
         </div>
       </div>
       <div class="profile-detail-row">
         <div class="profile-detail-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.21 15a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
         <div class="profile-detail-content">
           <div class="profile-detail-label">Phone</div>
-          <div class="profile-detail-value">${
+          <div class="profile-detail-value">${escapeHtml(
             person.phone || "Not provided"
-          }</div>
+          )}</div>
         </div>
       </div>
       <div class="profile-detail-row">
@@ -1027,25 +1260,27 @@ function openProfileDrawer(person) {
         </div>
       </div>
       ${
+        person.gender
+          ? `
+      <div class="profile-detail-row">
+        <div class="profile-detail-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 2.5-8 4v1h16v-1c0-1.5-3-4-8-4z"/></svg></div>
+        <div class="profile-detail-content">
+          <div class="profile-detail-label">Gender</div>
+          <div class="profile-detail-value">${escapeHtml(person.gender)}</div>
+        </div>
+      </div>`
+          : ""
+      }
+      ${
         person.department
           ? `
       <div class="profile-detail-row">
         <div class="profile-detail-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
         <div class="profile-detail-content">
           <div class="profile-detail-label">Department</div>
-          <div class="profile-detail-value">${person.department}</div>
-        </div>
-      </div>`
-          : ""
-      }
-      ${
-        person.joined
-          ? `
-      <div class="profile-detail-row">
-        <div class="profile-detail-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-        <div class="profile-detail-content">
-          <div class="profile-detail-label">Date Joined</div>
-          <div class="profile-detail-value">${formatDate(person.joined)}</div>
+          <div class="profile-detail-value">${escapeHtml(
+            person.department
+          )}</div>
         </div>
       </div>`
           : ""
@@ -1057,22 +1292,22 @@ function openProfileDrawer(person) {
         <div class="profile-detail-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
         <div class="profile-detail-content">
           <div class="profile-detail-label">Notes</div>
-          <div class="profile-detail-value">${person.notes}</div>
+          <div class="profile-detail-value">${escapeHtml(person.notes)}</div>
         </div>
       </div>`
           : ""
       }
     </div>
     <div class="profile-actions">
-      <button class="btn-edit" style="flex:1;min-height:38px;" data-id="${
+      <button class="btn-edit" style="flex:1;min-height:38px;" data-id="${escapeHtml(
         person.id
-      }">
+      )}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Edit
       </button>
-      <button class="btn-delete" style="flex:1;min-height:38px;" data-id="${
+      <button class="btn-delete" style="flex:1;min-height:38px;" data-id="${escapeHtml(
         person.id
-      }">
+      )}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
         Delete
       </button>
@@ -1098,6 +1333,7 @@ function closeProfileDrawer() {
 }
 
 profileClose.addEventListener("click", closeProfileDrawer);
+
 let _drawerPointerDownX = 0;
 let _drawerPointerDownY = 0;
 
@@ -1110,13 +1346,13 @@ profileOverlay.addEventListener("click", (e) => {
   if (e.target !== profileOverlay) return;
   const dx = Math.abs(e.clientX - _drawerPointerDownX);
   const dy = Math.abs(e.clientY - _drawerPointerDownY);
-  // If pointer moved more than 8px it was a scroll, not a tap — ignore
   if (dx > 8 || dy > 8) return;
   closeProfileDrawer();
 });
 
 // ══════════════════════════════════════════════════════════════
 //  REGISTRATION & EDIT FORM
+//  (Date Joined removed; Gender added; BUG FIX med#14: dirty-form)
 // ══════════════════════════════════════════════════════════════
 const form = document.getElementById("reg-form");
 const submitBtn = document.getElementById("form-submit-btn");
@@ -1126,19 +1362,31 @@ const formPageTitle = document.getElementById("form-page-title");
 const fields = {
   fullName: () => document.getElementById("f-fullName"),
   dob: () => document.getElementById("f-dob"),
+  gender: () => document.getElementById("f-gender"),
   role: () => document.getElementById("f-role"),
   email: () => document.getElementById("f-email"),
   phone: () => document.getElementById("f-phone"),
   department: () => document.getElementById("f-department"),
-  joined: () => document.getElementById("f-joined"),
   notes: () => document.getElementById("f-notes"),
 };
+
+function formIsDirty() {
+  if (!form) return false;
+  if (form.dataset.editId) return true;
+  return Object.values(fields).some((fn) => {
+    const el = fn();
+    if (!el) return false;
+    if (el.tagName === "SELECT") return el.value !== "";
+    return el.value.trim() !== "";
+  });
+}
 
 function validateForm() {
   let valid = true;
   const rules = [
     { field: "fullName", errId: "err-fullName", msg: "Full name is required." },
     { field: "dob", errId: "err-dob", msg: "Date of birth is required." },
+    { field: "gender", errId: "err-gender", msg: "Please select a gender." },
     {
       field: "email",
       errId: "err-email",
@@ -1150,6 +1398,7 @@ function validateForm() {
 
   rules.forEach(({ field, errId, msg, extra }) => {
     const el = fields[field]();
+    if (!el) return;
     const errEl = document.getElementById(errId);
     const value = el.value.trim();
     el.classList.remove("invalid");
@@ -1177,7 +1426,7 @@ function resetForm() {
     const el = fn();
     if (el) el.classList.remove("invalid");
   });
-  ["err-fullName", "err-dob", "err-email"].forEach((id) => {
+  ["err-fullName", "err-dob", "err-gender", "err-email"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.textContent = "";
   });
@@ -1198,11 +1447,11 @@ function resetForm() {
 function loadPersonIntoForm(person) {
   fields.fullName().value = person.fullName || "";
   fields.dob().value = person.dob || "";
+  fields.gender().value = person.gender || "";
   fields.role().value = person.role || "Member";
   fields.email().value = person.email || "";
   fields.phone().value = person.phone || "";
   fields.department().value = person.department || "";
-  fields.joined().value = person.joined || "";
   fields.notes().value = person.notes || "";
   form.dataset.editId = person.id;
   if (submitBtn) {
@@ -1227,17 +1476,18 @@ cancelBtn.addEventListener("click", () => {
   resetForm();
   if (auth.currentUser) navigateTo("members");
 });
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!validateForm()) return;
 
   const fullName = fields.fullName().value.trim();
   const dob = fields.dob().value;
+  const gender = fields.gender().value;
   const role = fields.role().value;
   const email = fields.email().value.trim();
   const phone = fields.phone().value.trim();
   const department = fields.department().value;
-  const joined = fields.joined().value;
   const notes = fields.notes().value.trim();
   const editId = form.dataset.editId;
 
@@ -1263,17 +1513,17 @@ form.addEventListener("submit", async (e) => {
       await updateDoc(doc(db, "members", editId), {
         fullName,
         dob,
+        gender: gender || null,
         role,
         email,
         phone: phone || null,
         department: department || null,
-        joined: joined || null,
         notes: notes || null,
       });
       showToast(
         "success",
         "Member updated",
-        `${fullName}'s record has been updated.`
+        `${escapeHtml(fullName)}'s record has been updated.`
       );
       resetForm();
       navigateTo("members");
@@ -1281,18 +1531,18 @@ form.addEventListener("submit", async (e) => {
       await addDoc(collection(db, "members"), {
         fullName,
         dob,
+        gender: gender || null,
         role,
         email,
         phone: phone || null,
         department: department || null,
-        joined: joined || null,
         notes: notes || null,
         createdAt: Timestamp.now(),
       });
       showToast(
         "success",
         "Member registered",
-        `${fullName} has been added to the system.`
+        `${escapeHtml(fullName)} has been added to the system.`
       );
       resetForm();
     }
@@ -1347,7 +1597,7 @@ modalConfirm.addEventListener("click", async () => {
     showToast(
       "success",
       "Member deleted",
-      `${pendingDeleteName} has been removed.`
+      `${escapeHtml(pendingDeleteName)} has been removed.`
     );
   } catch (err) {
     showToast(
@@ -1397,10 +1647,10 @@ function renderBirthdaysPage() {
         <div class="birthday-card-large today">
           <div class="birthday-avatar-lg">${getInitials(p.fullName)}</div>
           <div class="birthday-card-info">
-            <div class="birthday-card-name">${p.fullName}</div>
-            <div class="birthday-card-meta">${p.role}${
-        p.department ? ` · ${p.department}` : ""
-      } · ${p.email}</div>
+            <div class="birthday-card-name">${escapeHtml(p.fullName)}</div>
+            <div class="birthday-card-meta">${escapeHtml(p.role)}${
+        p.department ? ` · ${escapeHtml(p.department)}` : ""
+      } · ${escapeHtml(p.email)}</div>
           </div>
           <span class="birthday-card-tag">🎉 Today!</span>
         </div>
@@ -1419,9 +1669,9 @@ function renderBirthdaysPage() {
         <div class="birthday-card-large">
           <div class="birthday-avatar-lg">${getInitials(p.fullName)}</div>
           <div class="birthday-card-info">
-            <div class="birthday-card-name">${p.fullName}</div>
-            <div class="birthday-card-meta">${p.role}${
-        p.department ? ` · ${p.department}` : ""
+            <div class="birthday-card-name">${escapeHtml(p.fullName)}</div>
+            <div class="birthday-card-meta">${escapeHtml(p.role)}${
+        p.department ? ` · ${escapeHtml(p.department)}` : ""
       }</div>
           </div>
           <span class="birthday-card-tag">${
@@ -1462,366 +1712,7 @@ scriptureFooter.textContent =
 document.getElementById("main-content")?.appendChild(scriptureFooter);
 
 // ══════════════════════════════════════════════════════════════
-//  NOTICE BOARD
-//  Firestore collection: notices
-//  Document shape: { text: string, createdAt: Timestamp }
-// ══════════════════════════════════════════════════════════════
-const noticeToggleFormBtn = document.getElementById("notice-toggle-form-btn");
-const noticeFormWrap = document.getElementById("notice-form-wrap");
-const noticeInput = document.getElementById("notice-input");
-const noticeCancelBtn = document.getElementById("notice-cancel-btn");
-const noticePostBtn = document.getElementById("notice-post-btn");
-const noticePostText = document.getElementById("notice-post-text");
-const noticePostSpinner = document.getElementById("notice-post-spinner");
-const noticeCharCount = document.getElementById("notice-char-count");
-const noticesList = document.getElementById("notices-list");
-
-let allNotices = [];
-
-noticeToggleFormBtn?.addEventListener("click", () => {
-  const open =
-    noticeFormWrap.style.display !== "none" &&
-    noticeFormWrap.style.display !== "";
-  if (open) {
-    noticeFormWrap.style.display = "none";
-    noticeToggleFormBtn.textContent = "+ Post Notice";
-  } else {
-    noticeFormWrap.style.display = "block";
-    noticeToggleFormBtn.textContent = "Hide";
-    noticeInput.focus();
-  }
-});
-
-noticeCancelBtn?.addEventListener("click", () => {
-  noticeFormWrap.style.display = "none";
-  noticeToggleFormBtn.textContent = "+ Post Notice";
-  noticeInput.value = "";
-  if (noticeCharCount) noticeCharCount.textContent = "0 / 300";
-});
-
-noticeInput?.addEventListener("input", () => {
-  const len = noticeInput.value.length;
-  if (noticeCharCount) noticeCharCount.textContent = `${len} / 300`;
-});
-
-noticePostBtn?.addEventListener("click", async () => {
-  const text = noticeInput.value.trim();
-  if (!text) {
-    showToast("warning", "Empty notice", "Write something before posting.");
-    return;
-  }
-
-  noticePostBtn.disabled = true;
-  noticePostText.style.display = "none";
-  noticePostSpinner.style.display = "inline-block";
-
-  try {
-    await addDoc(collection(db, "notices"), {
-      text,
-      createdAt: Timestamp.now(),
-    });
-    noticeInput.value = "";
-    if (noticeCharCount) noticeCharCount.textContent = "0 / 300";
-    noticeFormWrap.style.display = "none";
-    noticeToggleFormBtn.textContent = "+ Post Notice";
-    showToast(
-      "success",
-      "Notice posted",
-      "Your notice is now visible on the board."
-    );
-  } catch (err) {
-    console.error("Notice post error:", err);
-    showToast("error", "Post failed", "Could not save the notice. Try again.");
-  } finally {
-    noticePostBtn.disabled = false;
-    noticePostText.style.display = "inline";
-    noticePostSpinner.style.display = "none";
-  }
-});
-
-function startNoticesListener() {
-  const q = query(
-    collection(db, "notices"),
-    orderBy("createdAt", "desc"),
-    limit(20)
-  );
-  onSnapshot(
-    q,
-    (snapshot) => {
-      allNotices = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-      renderNotices();
-    },
-    (err) => {
-      console.error("Notices listener error:", err);
-    }
-  );
-}
-
-function renderNotices() {
-  if (!noticesList) return;
-  if (allNotices.length === 0) {
-    noticesList.innerHTML = `<p style="font-size:13px;color:var(--text-muted);padding:4px 0;">No notices yet.</p>`;
-    return;
-  }
-  noticesList.innerHTML = allNotices
-    .map((n) => {
-      const dateStr = n.createdAt
-        ? new Date(n.createdAt.toMillis()).toLocaleDateString("en-NG", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "";
-      return `
-      <div class="notice-item" data-id="${n.id}">
-        <div class="notice-item-dot"></div>
-        <div class="notice-item-body">
-          <div class="notice-item-text">${escapeHtml(n.text)}</div>
-          ${dateStr ? `<div class="notice-item-meta">${dateStr}</div>` : ""}
-        </div>
-        <button class="notice-item-delete" data-id="${
-          n.id
-        }" title="Delete notice" aria-label="Delete notice">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          </svg>
-        </button>
-      </div>
-    `;
-    })
-    .join("");
-
-  noticesList.querySelectorAll(".notice-item-delete").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const id = btn.dataset.id;
-      try {
-        await deleteDoc(doc(db, "notices", id));
-        showToast("success", "Notice removed", "");
-      } catch (err) {
-        showToast("error", "Delete failed", "Could not remove the notice.");
-      }
-    });
-  });
-}
-
-function escapeHtml(str) {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-// ══════════════════════════════════════════════════════════════
-//  WEEKLY ATTENDANCE HEADCOUNT
-//  Firestore collection: attendance
-//  Document shape: { date: "YYYY-MM-DD", count: number, createdAt: Timestamp }
-// ══════════════════════════════════════════════════════════════
-let attendanceData = [];
-
-const attDateInput = document.getElementById("att-date");
-const attCountInput = document.getElementById("att-count");
-const attSaveBtn = document.getElementById("att-save-btn");
-const attSaveText = document.getElementById("att-save-text");
-const attSaveSpinner = document.getElementById("att-save-spinner");
-
-if (attDateInput) {
-  attDateInput.value = new Date().toISOString().split("T")[0];
-}
-
-attSaveBtn?.addEventListener("click", async () => {
-  const date = attDateInput?.value;
-  const count = parseInt(attCountInput?.value);
-
-  if (!date) {
-    showToast("warning", "Date required", "Please select a date.");
-    return;
-  }
-  if (isNaN(count) || count < 0) {
-    showToast(
-      "warning",
-      "Invalid count",
-      "Please enter a valid headcount number."
-    );
-    return;
-  }
-
-  attSaveBtn.disabled = true;
-  attSaveText.style.display = "none";
-  attSaveSpinner.style.display = "inline-block";
-
-  try {
-    const isNew = !attendanceData.find((r) => r.date === date);
-    await setDoc(
-      doc(db, "attendance", date),
-      { date, count, createdAt: Timestamp.now() },
-      { merge: true }
-    );
-    showToast(
-      "success",
-      isNew ? "Headcount saved" : "Record updated",
-      `${count} attendees recorded for ${formatDate(date)}.`
-    );
-    if (attCountInput) attCountInput.value = "";
-  } catch (err) {
-    console.error("Attendance save error:", err);
-    showToast("error", "Save failed", "Could not save headcount. Try again.");
-  } finally {
-    attSaveBtn.disabled = false;
-    attSaveText.style.display = "inline";
-    attSaveSpinner.style.display = "none";
-  }
-});
-
-function startAttendanceListener() {
-  const q = query(collection(db, "attendance"), orderBy("date", "asc"));
-  unsubscribeAttendance = onSnapshot(
-    q,
-    (snapshot) => {
-      attendanceData = snapshot.docs.map((d) => ({ docId: d.id, ...d.data() }));
-      renderAttendanceChart();
-    },
-    (err) => {
-      console.error("Attendance listener error:", err);
-    }
-  );
-}
-
-function renderAttendanceChart() {
-  const canvas = document.getElementById("att-chart");
-  const emptyEl = document.getElementById("att-chart-empty");
-  if (!canvas || !emptyEl) return;
-
-  const data = attendanceData.slice(-8);
-
-  if (data.length === 0) {
-    canvas.style.display = "none";
-    emptyEl.style.display = "flex";
-    return;
-  }
-
-  canvas.style.display = "block";
-  emptyEl.style.display = "none";
-
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.parentElement.clientWidth || 600;
-  const H = 180;
-  canvas.style.width = W + "px";
-  canvas.style.height = H + "px";
-  canvas.width = W * dpr;
-  canvas.height = H * dpr;
-
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
-
-  const NAVY = "#0f2147";
-  const MUTED = "#8a94a8";
-  const BORDER = "#e2e8f5";
-
-  ctx.clearRect(0, 0, W, H);
-
-  const PAD_L = 36,
-    PAD_R = 10,
-    PAD_T = 14,
-    PAD_B = 36;
-  const chartW = W - PAD_L - PAD_R;
-  const chartH = H - PAD_T - PAD_B;
-
-  const maxCount = Math.max(...data.map((d) => d.count), 1);
-  const yMax = Math.ceil(maxCount / 10) * 10 || 10;
-
-  const gridLines = 4;
-  ctx.strokeStyle = BORDER;
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= gridLines; i++) {
-    const y = PAD_T + chartH - (i / gridLines) * chartH;
-    ctx.beginPath();
-    ctx.moveTo(PAD_L, y);
-    ctx.lineTo(PAD_L + chartW, y);
-    ctx.stroke();
-    ctx.fillStyle = MUTED;
-    ctx.font = "10px Sora, system-ui, sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText(Math.round((i / gridLines) * yMax), PAD_L - 4, y + 3);
-  }
-
-  const barCount = data.length;
-  const gap = 6;
-  const barW = (chartW - gap * (barCount + 1)) / barCount;
-
-  data.forEach((record, i) => {
-    const barH = (record.count / yMax) * chartH;
-    const x = PAD_L + gap + i * (barW + gap);
-    const y = PAD_T + chartH - barH;
-
-    const grad = ctx.createLinearGradient(0, y, 0, y + barH);
-    grad.addColorStop(0, NAVY);
-    grad.addColorStop(1, "#1a3368");
-    ctx.fillStyle = grad;
-
-    const r = Math.min(4, barW / 2, barH / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + barW - r, y);
-    ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
-    ctx.lineTo(x + barW, y + barH);
-    ctx.lineTo(x, y + barH);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-    ctx.fill();
-
-    if (barH > 16) {
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 10px Sora, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(record.count, x + barW / 2, y + 12);
-    } else {
-      ctx.fillStyle = NAVY;
-      ctx.font = "bold 10px Sora, system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(record.count, x + barW / 2, y - 4);
-    }
-
-    const dateLabel = formatShortDate(record.date);
-    ctx.fillStyle = MUTED;
-    ctx.font = "9px Sora, system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(dateLabel, x + barW / 2, H - PAD_B + 14);
-  });
-}
-
-function formatShortDate(dateStr) {
-  if (!dateStr) return "";
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  const [, m, d] = dateStr.split("-");
-  return `${parseInt(d)} ${months[parseInt(m) - 1]}`;
-}
-
-window.addEventListener("resize", () => {
-  const activePage = document.querySelector(".page.active");
-  if (activePage && activePage.id === "page-dashboard") renderAttendanceChart();
-});
-
-// ══════════════════════════════════════════════════════════════
-//  EXPORT PAGE MODULE
+//  EXPORT PAGE MODULE  (BUG FIX med#9: email delivery disabled)
 // ══════════════════════════════════════════════════════════════
 const exportRunBtn = document.getElementById("export-run-btn");
 const exportRunText = document.getElementById("export-run-text");
@@ -1838,7 +1729,6 @@ const exportDateWarning = document.getElementById("export-date-warning");
 const exportBlazeNotice = document.getElementById("export-blaze-notice");
 
 const exportSessionHistory = [];
-
 let expRole = "all";
 let expFormat = "pdf";
 let expDelivery = "download";
@@ -1885,6 +1775,15 @@ document
   .querySelectorAll("#export-delivery-group .export-delivery-card")
   .forEach((card) => {
     card.addEventListener("click", () => {
+      if (card.dataset.value === "email") {
+        showToast(
+          "warning",
+          "Email delivery unavailable",
+          "Email delivery is not enabled for this installation. Please use Download instead."
+        );
+        return;
+      }
+
       expDelivery = card.dataset.value;
       document
         .querySelectorAll("#export-delivery-group .export-delivery-card")
@@ -1934,9 +1833,8 @@ function validateExportMonths() {
   const from = parseInt(exportMonthFrom?.value || "0");
   const to = parseInt(exportMonthTo?.value || "0");
   const invalid = from && to && from > to;
-  if (exportDateWarning) {
+  if (exportDateWarning)
     exportDateWarning.style.display = invalid ? "flex" : "none";
-  }
 }
 
 function getExportData() {
@@ -2030,24 +1928,14 @@ exportRunBtn?.addEventListener("click", async () => {
   const filename = `RCCG-Immanuel_${roleLabel}${dateTag}`;
 
   try {
-    if (expDelivery === "download") {
-      if (expFormat === "pdf") await exportPDF(data, filename, roleLabel);
-      else exportXLSX(data, filename, roleLabel);
-      pushExportHistory(filename, expFormat, data.length, "Downloaded");
-      showToast(
-        "success",
-        "Export complete",
-        `${data.length} records saved as ${expFormat.toUpperCase()}.`
-      );
-    } else {
-      await simulateEmailExport(data, filename);
-      pushExportHistory(filename, expFormat, data.length, "Emailed");
-      showToast(
-        "success",
-        "Export emailed",
-        `${data.length} records sent to the admin email.`
-      );
-    }
+    if (expFormat === "pdf") await exportPDF(data, filename, roleLabel);
+    else exportXLSX(data, filename, roleLabel);
+    pushExportHistory(filename, expFormat, data.length, "Downloaded");
+    showToast(
+      "success",
+      "Export complete",
+      `${data.length} records saved as ${expFormat.toUpperCase()}.`
+    );
   } catch (err) {
     console.error("Export error:", err);
     showToast(
@@ -2089,14 +1977,16 @@ function buildExportDateTag() {
 // ══════════════════════════════════════════════════════════════
 //  PDF EXPORT
 // ══════════════════════════════════════════════════════════════
-// BUG FIX high#2: throw instead of return so caller's catch handles it
 async function exportPDF(data, filename, roleLabel) {
-  if (!window.jspdf) {
+  if (!window.jspdf)
     throw new Error("jsPDF CDN failed. Check your internet connection.");
-  }
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const pageW = doc.internal.pageSize.width;
+  const pdfDoc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
+  const pageW = pdfDoc.internal.pageSize.width;
 
   const NAVY = [15, 33, 71];
   const GOLD = [212, 160, 23];
@@ -2104,26 +1994,18 @@ async function exportPDF(data, filename, roleLabel) {
   const WHITE = [255, 255, 255];
   const MUTED = [138, 148, 168];
 
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, pageW, 26, "F");
-  doc.setFillColor(...GOLD);
-  doc.rect(0, 26, pageW, 1.5, "F");
-
-  const cx = 10,
-    cy = 13;
-  doc.setDrawColor(...GOLD);
-  doc.setLineWidth(1.2);
-  doc.line(cx, cy - 6, cx, cy + 6);
-  doc.line(cx - 4, cy - 2, cx + 4, cy - 2);
-
-  doc.setTextColor(...WHITE);
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.text("RCCG Immanuel — Mega Parish Youth Province 13", 18, 11);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(...GOLD);
-  doc.text("Parish Admin System  ·  Member Export Report", 18, 18);
+  pdfDoc.setFillColor(...NAVY);
+  pdfDoc.rect(0, 0, pageW, 26, "F");
+  pdfDoc.setFillColor(...GOLD);
+  pdfDoc.rect(0, 26, pageW, 1.5, "F");
+  pdfDoc.setTextColor(...WHITE);
+  pdfDoc.setFontSize(13);
+  pdfDoc.setFont("helvetica", "bold");
+  pdfDoc.text("RCCG Immanuel — Mega Parish Youth Province 13", 18, 11);
+  pdfDoc.setFontSize(8);
+  pdfDoc.setFont("helvetica", "normal");
+  pdfDoc.setTextColor(...GOLD);
+  pdfDoc.text("Parish Admin System  ·  Member Export Report", 18, 18);
 
   const generatedAt = new Date().toLocaleString("en-NG", {
     day: "numeric",
@@ -2152,48 +2034,47 @@ async function exportPDF(data, filename, roleLabel) {
   const fromLabel = fromMonthNum ? MONTH_NAMES_PDF[fromMonthNum] : "Any";
   const toLabel = toMonthNum ? MONTH_NAMES_PDF[toMonthNum] : "Any";
 
-  doc.setTextColor(...NAVY);
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.text(`${roleLabel} Export`, 14, 34);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(74, 85, 120);
-  doc.setFontSize(8);
-  doc.text(`Generated: ${generatedAt}`, 14, 39.5);
-  doc.text(`Birth month range: ${fromLabel} → ${toLabel}`, 14, 44.5);
-
-  doc.setFillColor(...NAVY);
-  doc.roundedRect(pageW - 55, 29, 42, 18, 3, 3, "F");
-  doc.setTextColor(...GOLD);
-  doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  doc.text(String(data.length), pageW - 34, 41, { align: "center" });
-  doc.setFontSize(7);
-  doc.setTextColor(...WHITE);
-  doc.setFont("helvetica", "normal");
-  doc.text("TOTAL RECORDS", pageW - 34, 45, { align: "center" });
+  pdfDoc.setTextColor(...NAVY);
+  pdfDoc.setFontSize(9);
+  pdfDoc.setFont("helvetica", "bold");
+  pdfDoc.text(`${roleLabel} Export`, 14, 34);
+  pdfDoc.setFont("helvetica", "normal");
+  pdfDoc.setTextColor(74, 85, 120);
+  pdfDoc.setFontSize(8);
+  pdfDoc.text(`Generated: ${generatedAt}`, 14, 39.5);
+  pdfDoc.text(`Birth month range: ${fromLabel} → ${toLabel}`, 14, 44.5);
+  pdfDoc.setFillColor(...NAVY);
+  pdfDoc.roundedRect(pageW - 55, 29, 42, 18, 3, 3, "F");
+  pdfDoc.setTextColor(...GOLD);
+  pdfDoc.setFontSize(18);
+  pdfDoc.setFont("helvetica", "bold");
+  pdfDoc.text(String(data.length), pageW - 34, 41, { align: "center" });
+  pdfDoc.setFontSize(7);
+  pdfDoc.setTextColor(...WHITE);
+  pdfDoc.setFont("helvetica", "normal");
+  pdfDoc.text("TOTAL RECORDS", pageW - 34, 45, { align: "center" });
 
   const columns = [
     { header: "Birthday", dataKey: "birthday" },
     { header: "Full Name", dataKey: "fullName" },
+    { header: "Gender", dataKey: "gender" },
     { header: "Phone", dataKey: "phone" },
     { header: "Email", dataKey: "email" },
     { header: "Role", dataKey: "role" },
     { header: "Department", dataKey: "department" },
-    { header: "Date Joined", dataKey: "joined" },
   ];
 
   const rows = data.map((m) => ({
     birthday: formatDayMonth(m.dob),
     fullName: m.fullName || "—",
+    gender: m.gender || "—",
     phone: m.phone || "—",
     email: m.email || "—",
     role: m.role || "—",
     department: m.department || "—",
-    joined: formatDate(m.joined),
   }));
 
-  doc.autoTable({
+  pdfDoc.autoTable({
     startY: 52,
     columns,
     body: rows,
@@ -2213,12 +2094,12 @@ async function exportPDF(data, filename, roleLabel) {
     },
     columnStyles: {
       0: { cellWidth: 24 },
-      1: { cellWidth: 44 },
-      2: { cellWidth: 30 },
-      3: { cellWidth: 56 },
-      4: { cellWidth: 20 },
-      5: { cellWidth: 30 },
-      6: { cellWidth: 26 },
+      1: { cellWidth: 42 },
+      2: { cellWidth: 16 },
+      3: { cellWidth: 28 },
+      4: { cellWidth: 52 },
+      5: { cellWidth: 18 },
+      6: { cellWidth: 30 },
     },
     didParseCell: (h) => {
       if (
@@ -2231,15 +2112,15 @@ async function exportPDF(data, filename, roleLabel) {
       }
     },
     didDrawPage: (h) => {
-      const pH = doc.internal.pageSize.height;
-      doc.setFillColor(...GOLD);
-      doc.rect(0, pH - 10, pageW, 0.8, "F");
-      doc.setFontSize(7);
-      doc.setTextColor(...MUTED);
-      doc.text(
+      const pH = pdfDoc.internal.pageSize.height;
+      pdfDoc.setFillColor(...GOLD);
+      pdfDoc.rect(0, pH - 10, pageW, 0.8, "F");
+      pdfDoc.setFontSize(7);
+      pdfDoc.setTextColor(...MUTED);
+      pdfDoc.text(
         `Page ${
           h.pageNumber
-        } of ${doc.internal.getNumberOfPages()}  ·  RCCG Immanuel Parish Admin  ·  Confidential`,
+        } of ${pdfDoc.internal.getNumberOfPages()}  ·  RCCG Immanuel Parish Admin  ·  Confidential`,
         pageW / 2,
         pH - 6,
         { align: "center" }
@@ -2247,17 +2128,15 @@ async function exportPDF(data, filename, roleLabel) {
     },
   });
 
-  doc.save(`${filename}.pdf`);
+  pdfDoc.save(`${filename}.pdf`);
 }
 
 // ══════════════════════════════════════════════════════════════
 //  EXCEL EXPORT
 // ══════════════════════════════════════════════════════════════
-// BUG FIX high#2: throw so caller's catch handles it
 function exportXLSX(data, filename, roleLabel) {
-  if (!window.XLSX) {
+  if (!window.XLSX)
     throw new Error("SheetJS CDN failed. Check your internet connection.");
-  }
   const XLSX = window.XLSX;
   const generatedAt = new Date().toLocaleString("en-NG", {
     day: "numeric",
@@ -2299,31 +2178,31 @@ function exportXLSX(data, filename, roleLabel) {
   const headers = [
     "Birthday (Day & Month)",
     "Full Name",
+    "Gender",
     "Phone",
     "Email",
     "Role",
     "Department",
-    "Date Joined",
   ];
   const dataRows = data.map((m) => [
     formatDayMonth(m.dob),
     m.fullName || "",
+    m.gender || "",
     m.phone || "",
     m.email || "",
     m.role || "",
     m.department || "",
-    formatDate(m.joined),
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet([...titleRows, headers, ...dataRows]);
   ws["!cols"] = [
     { wch: 22 },
     { wch: 30 },
+    { wch: 10 },
     { wch: 18 },
     { wch: 36 },
     { wch: 10 },
     { wch: 22 },
-    { wch: 16 },
   ];
   ws["!merges"] = [
     { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
@@ -2336,14 +2215,6 @@ function exportXLSX(data, filename, roleLabel) {
   const sheetName = expRole === "all" ? "All Members" : expRole + "s";
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   XLSX.writeFile(wb, `${filename}.xlsx`);
-}
-// ══════════════════════════════════════════════════════════════
-//  EMAIL EXPORT (simulated)
-// ══════════════════════════════════════════════════════════════
-async function simulateEmailExport(data, filename) {
-  void data;
-  void filename;
-  await new Promise((r) => setTimeout(r, 1500));
 }
 
 function pushExportHistory(filename, format, count, delivery) {
@@ -2382,7 +2253,9 @@ function renderExportHistory() {
         e.format === "pdf" ? pdfSvg : xlsxSvg
       }</div>
       <div class="export-history-info">
-        <div class="export-history-name">${e.filename}.${e.format}</div>
+        <div class="export-history-name">${escapeHtml(e.filename)}.${escapeHtml(
+        e.format
+      )}</div>
         <div class="export-history-meta">${
           e.count
         } records · ${e.at.toLocaleTimeString("en-NG", {
@@ -2390,10 +2263,266 @@ function renderExportHistory() {
         minute: "2-digit",
       })}</div>
       </div>
-      <span class="export-history-badge ${e.delivery.toLowerCase()}">${
+      <span class="export-history-badge ${e.delivery.toLowerCase()}">${escapeHtml(
         e.delivery
-      }</span>
+      )}</span>
     </div>`
     )
     .join("");
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ATTENDANCE PAGE
+//  Firestore collection: attendance
+//  Document shape: { date, male, female, total, createdAt }
+//  setDoc with merge:true so re-entering a date updates in place
+// ══════════════════════════════════════════════════════════════
+let attendanceData = [];
+
+const attDateInput = document.getElementById("att-date");
+const attMaleInput = document.getElementById("att-male");
+const attFemaleInput = document.getElementById("att-female");
+const attSaveBtn = document.getElementById("att-save-btn");
+const attSaveText = document.getElementById("att-save-text");
+const attSaveSpinner = document.getElementById("att-save-spinner");
+
+if (attDateInput) attDateInput.value = new Date().toISOString().split("T")[0];
+
+attSaveBtn?.addEventListener("click", async () => {
+  const date = attDateInput?.value;
+  const male = parseInt(attMaleInput?.value);
+  const female = parseInt(attFemaleInput?.value);
+
+  if (!date) {
+    showToast("warning", "Date required", "Please select a date.");
+    return;
+  }
+  if (isNaN(male) || male < 0) {
+    showToast(
+      "warning",
+      "Invalid count",
+      "Enter a valid male count (0 or more)."
+    );
+    return;
+  }
+  if (isNaN(female) || female < 0) {
+    showToast(
+      "warning",
+      "Invalid count",
+      "Enter a valid female count (0 or more)."
+    );
+    return;
+  }
+
+  const total = male + female;
+  const isNew = !attendanceData.find((r) => r.date === date);
+
+  attSaveBtn.disabled = true;
+  if (attSaveText) attSaveText.style.display = "none";
+  if (attSaveSpinner) attSaveSpinner.style.display = "inline-block";
+
+  try {
+    await setDoc(
+      doc(db, "attendance", date),
+      { date, male, female, total, createdAt: Timestamp.now() },
+      { merge: true }
+    );
+    showToast(
+      "success",
+      isNew ? "Attendance saved" : "Record updated",
+      `${total} attendees (${male}M / ${female}F) on ${formatDate(date)}.`
+    );
+    if (attMaleInput) attMaleInput.value = "";
+    if (attFemaleInput) attFemaleInput.value = "";
+  } catch (err) {
+    console.error("Attendance save error:", err);
+    showToast("error", "Save failed", "Could not save attendance. Try again.");
+  } finally {
+    attSaveBtn.disabled = false;
+    if (attSaveText) attSaveText.style.display = "inline";
+    if (attSaveSpinner) attSaveSpinner.style.display = "none";
+  }
+});
+
+function startAttendanceListener() {
+  const q = query(collection(db, "attendance"), orderBy("date", "asc"));
+  unsubscribeAttendance = onSnapshot(
+    q,
+    (snapshot) => {
+      attendanceData = snapshot.docs.map((d) => ({ docId: d.id, ...d.data() }));
+      const activePage = document.querySelector(".page.active");
+      if (activePage?.id === "page-attendance") renderAttendancePage();
+      if (activePage?.id === "page-dashboard") renderGenderQuarterlyChart();
+    },
+    (err) => console.error("Attendance listener error:", err)
+  );
+}
+
+function renderAttendancePage() {
+  renderAttendanceTable();
+  renderAttendanceDetailChart();
+}
+
+function renderAttendanceTable() {
+  const tbody = document.getElementById("att-table-body");
+  if (!tbody) return;
+
+  const sorted = [...attendanceData].sort((a, b) =>
+    b.date.localeCompare(a.date)
+  );
+  if (sorted.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">No records yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = sorted
+    .map(
+      (r) => `
+    <tr>
+      <td>${formatDate(r.date)}</td>
+      <td>${r.male ?? "—"}</td>
+      <td>${r.female ?? "—"}</td>
+      <td><strong>${r.total ?? "—"}</strong></td>
+      <td>
+        <button class="btn-delete att-delete-btn" data-id="${escapeHtml(
+          r.date
+        )}" style="padding:4px 10px;font-size:11px;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          Delete
+        </button>
+      </td>
+    </tr>
+  `
+    )
+    .join("");
+
+  tbody.querySelectorAll(".att-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await deleteDoc(doc(db, "attendance", btn.dataset.id));
+        showToast("success", "Record deleted", "");
+      } catch {
+        showToast("error", "Delete failed", "Could not remove the record.");
+      }
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ATTENDANCE DETAIL CHART  (BUG FIX med#8: debounced resize)
+// ══════════════════════════════════════════════════════════════
+let _attChartResizeTimer = null;
+
+function renderAttendanceDetailChart() {
+  const canvas = document.getElementById("att-detail-chart");
+  const emptyEl = document.getElementById("att-detail-chart-empty");
+  if (!canvas || !emptyEl) return;
+
+  const data = [...attendanceData]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-8);
+
+  if (data.length === 0) {
+    canvas.style.display = "none";
+    emptyEl.style.display = "flex";
+    return;
+  }
+  canvas.style.display = "block";
+  emptyEl.style.display = "none";
+
+  _drawAttendanceChart(canvas, data);
+
+  if (!canvas._resizeHandler) {
+    canvas._resizeHandler = () => {
+      clearTimeout(_attChartResizeTimer);
+      _attChartResizeTimer = setTimeout(() => {
+        const freshData = [...attendanceData]
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .slice(-8);
+        _drawAttendanceChart(canvas, freshData);
+      }, 150);
+    };
+    window.addEventListener("resize", canvas._resizeHandler);
+  }
+}
+
+function _drawAttendanceChart(canvas, data) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth || 600;
+  const H = 180;
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const NAVY = "#0f2147";
+  const GOLD = "#d4a017";
+  const BORDER = "#e2e8f5";
+  const MUTED = "#8a94a8";
+  const PAD_L = 36,
+    PAD_R = 10,
+    PAD_T = 20,
+    PAD_B = 36;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+
+  const maxVal = Math.max(
+    ...data.map((d) => (d.male ?? 0) + (d.female ?? 0)),
+    1
+  );
+  const yMax = Math.ceil(maxVal / 5) * 5 || 5;
+
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD_T + chartH - (i / 4) * chartH;
+    ctx.strokeStyle = BORDER;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, y);
+    ctx.lineTo(PAD_L + chartW, y);
+    ctx.stroke();
+    ctx.fillStyle = MUTED;
+    ctx.font = "10px Sora, system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(Math.round((i / 4) * yMax), PAD_L - 4, y + 3);
+  }
+
+  const gap = 8;
+  const barW = (chartW - gap * (data.length + 1)) / data.length;
+
+  data.forEach((r, i) => {
+    const male = r.male ?? 0;
+    const female = r.female ?? 0;
+    const x = PAD_L + gap + i * (barW + gap);
+    const baseY = PAD_T + chartH;
+    const maleH = (male / yMax) * chartH;
+    const femH = (female / yMax) * chartH;
+
+    if (femH > 0) {
+      ctx.fillStyle = GOLD;
+      ctx.fillRect(x, baseY - maleH - femH, barW, femH);
+    }
+    if (maleH > 0) {
+      ctx.fillStyle = NAVY;
+      ctx.fillRect(x, baseY - maleH, barW, maleH);
+    }
+
+    ctx.fillStyle = MUTED;
+    ctx.font = "9px Sora, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(formatShortDate(r.date), x + barW / 2, H - PAD_B + 14);
+  });
+
+  ctx.fillStyle = NAVY;
+  ctx.fillRect(PAD_L + 2, PAD_T - 14, 10, 8);
+  ctx.fillStyle = MUTED;
+  ctx.font = "9px Sora, system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Male", PAD_L + 15, PAD_T - 7);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(PAD_L + 50, PAD_T - 14, 10, 8);
+  ctx.fillStyle = MUTED;
+  ctx.fillText("Female", PAD_L + 63, PAD_T - 7);
 }
