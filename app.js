@@ -1373,11 +1373,11 @@ const fields = {
 function formIsDirty() {
   if (!form) return false;
   if (form.dataset.editId) return true;
-  return Object.values(fields).some((fn) => {
-    const el = fn();
-    if (!el) return false;
-    if (el.tagName === "SELECT") return el.value !== "";
-    return el.value.trim() !== "";
+  // Only check text inputs, not selects with default values
+  const textFields = ["fullName", "dob", "email", "phone", "notes"];
+  return textFields.some((key) => {
+    const el = fields[key]();
+    return el && el.value.trim() !== "";
   });
 }
 
