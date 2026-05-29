@@ -736,29 +736,49 @@ function formatShortDate(dateStr) {
   if (isNaN(m) || isNaN(d)) return "";
   return `${d} ${months[m - 1]}`;
 }
+function parseDayMonth(dobStr) {
+  if (!dobStr) return null;
+  const months = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ];
+  const match = dobStr.trim().match(/^(\d{1,2})\s+([A-Za-z]+)$/);
+  if (!match) return null;
+  const day = parseInt(match[1], 10);
+  const month = months.indexOf(match[2].toLowerCase()) + 1;
+  if (!month || day < 1 || day > 31) return null;
+  return { day, month };
+}
 
 function getDaysUntilBirthday(dobStr) {
   if (!dobStr) return null;
-  const parts = dobStr.split("-");
-  if (parts.length < 3) return null;
+  const parsed = parseDayMonth(dobStr);
+  if (!parsed) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const bm = parseInt(parts[1], 10);
-  const bd = parseInt(parts[2], 10);
-  if (isNaN(bm) || isNaN(bd)) return null;
-  let bday = new Date(today.getFullYear(), bm - 1, bd);
+  let bday = new Date(today.getFullYear(), parsed.month - 1, parsed.day);
   if (bday < today) bday.setFullYear(today.getFullYear() + 1);
   return Math.round((bday - today) / 86400000);
 }
 
 function isBirthdayToday(dobStr) {
   if (!dobStr) return false;
-  const parts = dobStr.split("-");
-  if (parts.length < 3) return false;
-  const bm = parseInt(parts[1], 10);
-  const bd = parseInt(parts[2], 10);
+  const parsed = parseDayMonth(dobStr);
+  if (!parsed) return false;
   const today = new Date();
-  return bm === today.getMonth() + 1 && bd === today.getDate();
+  return (
+    parsed.month === today.getMonth() + 1 && parsed.day === today.getDate()
+  );
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1158,7 +1178,7 @@ function renderMembersGrid(list) {
       }
       <div class="member-card-detail">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        DOB: ${formatDate(person.dob)}
+        DOB: ${escapeHtml(person.dob || "—")}
       </div>
       ${
         person.gender
@@ -1255,7 +1275,9 @@ function openProfileDrawer(person) {
         <div class="profile-detail-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
         <div class="profile-detail-content">
           <div class="profile-detail-label">Date of Birth</div>
-          <div class="profile-detail-value">${formatDate(person.dob)}</div>
+          <div class="profile-detail-value">${escapeHtml(
+            person.dob || "Not provided"
+          )}</div>
         </div>
       </div>
       ${
@@ -1383,7 +1405,13 @@ function validateForm() {
   let valid = true;
   const rules = [
     { field: "fullName", errId: "err-fullName", msg: "Full name is required." },
-    { field: "dob", errId: "err-dob", msg: "Date of birth is required." },
+    {
+      field: "dob",
+      errId: "err-dob",
+      msg: "Date of birth is required.",
+      extra: (v) =>
+        /^(\d{1,2})\s+([A-Za-z]+)$/.test(v) || "Use format: 15 March",
+    },
     { field: "gender", errId: "err-gender", msg: "Please select a gender." },
     {
       field: "email",
@@ -1843,7 +1871,9 @@ function getExportData() {
   if (fromMonth || toMonth) {
     data = data.filter((m) => {
       if (!m.dob) return false;
-      const birthMonth = parseInt(m.dob.split("-")[1], 10);
+      const parsed = parseDayMonth(m.dob);
+      const birthMonth = parsed ? parsed.month : null;
+      if (!birthMonth) return false;
       if (fromMonth && birthMonth < fromMonth) return false;
       if (toMonth && birthMonth > toMonth) return false;
       return true;
