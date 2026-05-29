@@ -300,13 +300,12 @@ const pageTitles = {
 };
 
 function navigateTo(pageId) {
-  if (pageId !== "register" && formIsDirty()) {
+  if (pageId !== "register" && formIsDirty() && auth.currentUser) {
     const confirmed = confirm(
       "You have unsaved changes in the registration form. Leave anyway?"
     );
     if (!confirmed) return;
   }
-
   pages.forEach((p) => p.classList.remove("active"));
   navItems.forEach((n) => {
     n.classList.remove("active");
@@ -1373,7 +1372,6 @@ const fields = {
 function formIsDirty() {
   if (!form) return false;
   if (form.dataset.editId) return true;
-  // Only check text inputs, not selects with default values
   const textFields = ["fullName", "dob", "email", "phone", "notes"];
   return textFields.some((key) => {
     const el = fields[key]();
